@@ -286,7 +286,11 @@ export default function Tasks() {
             <div style={{ display: 'flex', justifyContent: 'center' }}>
               <button
                 className="delegate-btn action-btn"
-                onClick={() => navigate('/dashboard?panel=agent')}
+                onClick={() => {
+                  const automateTasks = TASKS.filter(t => t.type === 'automate').map(t => ({ id: t.id, task: t.text, category: 'automate' }))
+                  const ownTasks      = TASKS.filter(t => t.type === 'own').map(t => ({ id: t.id, task: t.text, category: 'own' }))
+                  navigate('/dashboard?panel=agent', { state: { automateTasks, ownTasks, expandAgent: true } })
+                }}
                 style={{ width: '100%', maxWidth: '400px', padding: '16px 32px', borderRadius: '9999px', fontWeight: 700, color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 8px 24px rgba(74,158,150,0.35)', fontSize: '1rem' }}
               >
                 Delegate →
@@ -295,7 +299,11 @@ export default function Tasks() {
             <div style={{ display: 'flex', justifyContent: 'center' }}>
               <button
                 className="think-btn action-btn"
-                onClick={() => navigate('/dashboard?panel=focus')}
+                onClick={() => {
+                  const automateTasks = TASKS.filter(t => t.type === 'automate').map(t => ({ id: t.id, task: t.text, category: 'automate' }))
+                  const ownTasks      = TASKS.filter(t => t.type === 'own').map(t => ({ id: t.id, task: t.text, category: 'own' }))
+                  navigate('/dashboard?panel=focus', { state: { automateTasks, ownTasks, expandFocus: true } })
+                }}
                 style={{ width: '100%', maxWidth: '400px', padding: '16px 32px', borderRadius: '9999px', fontWeight: 700, color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 8px 24px rgba(212,98,42,0.35)', fontSize: '1rem' }}
               >
                 Think →

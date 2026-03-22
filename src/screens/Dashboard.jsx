@@ -1,58 +1,85 @@
-import { useState, useEffect, useRef } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
+
+// ─── Fallbacks when navigated to directly ────────────────────────────────────
+const FALLBACK_AUTOMATE = [
+  { id: 1, task: 'Resize 40 festive Ugadi banners',      category: 'automate' },
+  { id: 2, task: 'Generate UTM links for influencers',   category: 'automate' },
+  { id: 3, task: 'Format media spend CSV for agency',    category: 'automate' },
+  { id: 4, task: 'Pull Mangaluru lead drop data',        category: 'automate' },
+  { id: 5, task: 'Schedule launch day social posts',     category: 'automate' },
+  { id: 6, task: 'Export competitor ad spend report',    category: 'automate' },
+  { id: 7, task: 'Generate Ugadi emailer subject lines', category: 'automate' },
+]
+const FALLBACK_OWN = [
+  { id: 8,  task: 'Pivot visual language to Coastal identity', category: 'own' },
+  { id: 9,  task: 'Analyse why Hubli leads dropped 18%',       category: 'own' },
+  { id: 10, task: 'Map competitor local pricing strategy',     category: 'own' },
+  { id: 11, task: 'Build CFO briefing on Mangaluru campaign',  category: 'own' },
+  { id: 12, task: 'Define Regional Soul creative direction',   category: 'own' },
+]
+
+// ─── Derive a "thinking question" from a task name ───────────────────────────
+const getQuestion = (taskName) => `What's blocking progress on: ${taskName}?`
+
+// ─── Pseudo-random progress value seeded by task id ──────────────────────────
+const taskProgress = (id) => [45, 72, 88, 30, 60, 95, 50][id % 7]
 
 export default function Dashboard() {
-  const navigate = useNavigate()
+  const navigate      = useNavigate()
   const [searchParams] = useSearchParams()
-  const panel = searchParams.get('panel') // 'agent' or 'focus'
+  const location      = useLocation()
 
-  const [panelState, setPanelState] = useState('default') // default | agent-expanded | focus-expanded
-  const [statsCollapsed, setStatsCollapsed] = useState(false)
-  const [activeTab, setActiveTab] = useState('insights')
-  const [activeTask, setActiveTask] = useState('Why are Hubli creatives not resonating?')
-  const [instinct, setInstinct] = useState('')
-  const [showResponse, setShowResponse] = useState(false)
+  const panel = searchParams.get('panel') // 'agent' | 'focus'
+
+  // Read tasks passed from Tasks screen, fall back to demo data
+  const {
+    automateTasks = FALLBACK_AUTOMATE,
+    ownTasks      = FALLBACK_OWN,
+  } = location.state || {}
+
+  const [panelState,      setPanelState]      = useState('default')
+  const [statsCollapsed,  setStatsCollapsed]  = useState(false)
+  const [activeTab,       setActiveTab]       = useState('insights')
+  const [activePillIndex, setActivePillIndex] = useState(0)  // index into ownTasks
+  const [instinct,        setInstinct]        = useState('')
+  const [showResponse,    setShowResponse]    = useState(false)
   const [stickyCollapsed, setStickyCollapsed] = useState(false)
-  const [signalInput, setSignalInput] = useState('')
-  const [signals, setSignals] = useState(['Coastal Ochre palette'])
+  const [signalInput,     setSignalInput]     = useState('')
+  const [signals,         setSignals]         = useState(['Coastal Ochre palette'])
 
-  // On mount, read URL param and expand correct panel
+  // Expand correct panel on mount (from URL param or state flag)
   useEffect(() => {
-    if (panel === 'agent') {
+    if (panel === 'agent' || location.state?.expandAgent) {
       setPanelState('agent-expanded')
-    } else if (panel === 'focus') {
+    } else if (panel === 'focus' || location.state?.expandFocus) {
       setPanelState('focus-expanded')
     }
-  }, [panel])
+  }, [panel]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-collapse stats after 3s
+  // Auto-collapse stats after 3 s
   useEffect(() => {
     const t = setTimeout(() => setStatsCollapsed(true), 3000)
     return () => clearTimeout(t)
   }, [])
 
-  const leftClass = panelState === 'agent-expanded'
-    ? 'panel-expanded'
-    : panelState === 'focus-expanded'
-      ? 'panel-collapsed-strip'
-      : 'panel-half'
+  // Reset instinct response when pill changes
+  useEffect(() => { setShowResponse(false); setInstinct('') }, [activePillIndex])
 
-  const rightClass = panelState === 'focus-expanded'
-    ? 'panel-expanded'
-    : panelState === 'agent-expanded'
-      ? 'panel-collapsed-strip'
-      : 'panel-half'
+  const activePillTask = ownTasks[activePillIndex]?.task ?? ''
+  const activeQuestion = getQuestion(activePillTask)
 
-  const toggleLeft = () => {
-    setPanelState(prev => prev === 'agent-expanded' ? 'default' : 'agent-expanded')
-  }
-  const toggleRight = () => {
-    setPanelState(prev => prev === 'focus-expanded' ? 'default' : 'focus-expanded')
-  }
+  const leftClass  = panelState === 'agent-expanded' ? 'panel-expanded'
+                   : panelState === 'focus-expanded'  ? 'panel-collapsed-strip'
+                   : 'panel-half'
+  const rightClass = panelState === 'focus-expanded'  ? 'panel-expanded'
+                   : panelState === 'agent-expanded'  ? 'panel-collapsed-strip'
+                   : 'panel-half'
 
-  const handleInstinctSend = () => {
-    if (instinct.trim()) setShowResponse(true)
-  }
+  const toggleLeft  = () => setPanelState(p => p === 'agent-expanded' ? 'default' : 'agent-expanded')
+  const toggleRight = () => setPanelState(p => p === 'focus-expanded'  ? 'default' : 'focus-expanded')
+
+  const handleInstinctSend = () => { if (instinct.trim()) setShowResponse(true) }
 
   const addSignal = (e) => {
     if (e.key === 'Enter' && signalInput.trim()) {
@@ -65,50 +92,55 @@ export default function Dashboard() {
     <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", backgroundColor: '#0f1716', color: '#dce4e2', minHeight: '100vh', overflowX: 'hidden' }}>
       <style>{`
         .teal-text { color: #2dd4bf; }
-        .teal-bg { background-color: #2dd4bf; }
-        .panel-container { display: flex; gap: 1.5rem; min-height: 750px; transition: all 350ms ease-in-out; }
-        .panel-half { flex: 1; min-width: 0; }
-        .panel-expanded { flex: 3; min-width: 0; }
-        .panel-collapsed-strip { flex: 0 0 80px; min-width: 80px; cursor: pointer; }
-        .vertical-text { writing-mode: vertical-lr; transform: rotate(180deg); }
-        .progress-fill { transition: width 1s cubic-bezier(0.65, 0, 0.35, 1); }
-        .tab-active { color: #D4622A; border-bottom: 2px solid #D4622A; }
+        .teal-bg   { background-color: #2dd4bf; }
+        .panel-container         { display: flex; gap: 1.5rem; min-height: 750px; transition: all 350ms ease-in-out; }
+        .panel-half              { flex: 1; min-width: 0; }
+        .panel-expanded          { flex: 3; min-width: 0; }
+        .panel-collapsed-strip   { flex: 0 0 80px; min-width: 80px; cursor: pointer; }
+        .vertical-text           { writing-mode: vertical-lr; transform: rotate(180deg); }
+        .progress-fill           { transition: width 1s cubic-bezier(0.65,0,0.35,1); }
+        .tab-active              { color: #D4622A; border-bottom: 2px solid #D4622A; }
         .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        .transition-all-custom { transition: all 350ms cubic-bezier(0.4, 0, 0.2, 1); }
-        .stats-collapsed { height: 56px; overflow: hidden; }
-        .stats-expanded { height: 120px; }
-        .pulse-soft { animation: pulse-soft 2s infinite; }
+        .hide-scrollbar          { -ms-overflow-style: none; scrollbar-width: none; }
+        .transition-all-custom   { transition: all 350ms cubic-bezier(0.4,0,0.2,1); }
+        .stats-collapsed         { height: 56px; overflow: hidden; }
+        .stats-expanded          { height: 120px; }
+        .pulse-soft              { animation: pulse-soft 2s infinite; }
         @keyframes pulse-soft {
-          0% { box-shadow: 0 0 0 0 rgba(212,98,42,0.4); }
-          70% { box-shadow: 0 0 0 10px rgba(212,98,42,0); }
-          100% { box-shadow: 0 0 0 0 rgba(212,98,42,0); }
+          0%   { box-shadow: 0 0 0 0   rgba(212,98,42,0.4); }
+          70%  { box-shadow: 0 0 0 10px rgba(212,98,42,0); }
+          100% { box-shadow: 0 0 0 0   rgba(212,98,42,0); }
         }
         .notebook-input {
-          background: #1A1A1A;
-          border: 1px solid #D4622A;
+          background: #1A1A1A; border: 1px solid #D4622A;
           box-shadow: 0 0 10px rgba(212,98,42,0.2);
-          width: 100%;
-          padding: 16px 50px 16px 20px;
-          color: white;
-          outline: none;
-          border-radius: 12px;
+          width: 100%; padding: 16px 50px 16px 20px;
+          color: white; outline: none; border-radius: 12px;
         }
-        .notebook-input::placeholder { color: #666666; }
+        .notebook-input::placeholder { color: #666; }
         .notebook-input:focus { box-shadow: 0 0 15px rgba(212,98,42,0.3); }
         .sticky-note {
           width: 200px; height: 150px; background: #FFF8DC; color: #1a1a1a;
           position: fixed; bottom: 24px; right: 24px; z-index: 50;
           box-shadow: 0 10px 30px rgba(0,0,0,0.3); border-radius: 8px;
-          overflow: hidden; display: flex; flex-direction: column;
-          transition: all 0.3s;
+          overflow: hidden; display: flex; flex-direction: column; transition: all 0.3s;
         }
         .sticky-note.collapsed { height: 32px; }
         .notepad-lines {
           background-image: linear-gradient(#e5e0c9 1px, transparent 1px);
           background-size: 100% 16px; padding-top: 4px;
         }
-        .checkpoint-item.checked .check-icon { color: #2dd4bf; }
+        .agent-task-card {
+          background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05);
+          padding: 16px; border-radius: 12px; margin-bottom: 12px;
+        }
+        .pill-btn {
+          flex-shrink: 0; padding: 8px 16px; border-radius: 9999px;
+          font-size: 0.6875rem; font-weight: 700; cursor: pointer;
+          transition: all 0.2s; white-space: nowrap; font-family: inherit;
+        }
+        .pill-active   { background: #D4622A; border: 1px solid #D4622A; color: white; }
+        .pill-inactive { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.4); }
       `}</style>
 
       {/* Nav */}
@@ -125,8 +157,12 @@ export default function Dashboard() {
             style={{ background: 'rgba(35,44,42,0.4)', borderRadius: '16px', border: '1px solid rgba(87,66,58,0.1)', position: 'relative' }}
           >
             {!statsCollapsed && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '24px', padding: '24px', height: '100%' }}>
-                {[['Time Recovered', '14 hrs'], ['Automated Tasks', '7 active'], ['Data Streams', '5 protected']].map(([label, val]) => (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: '24px', padding: '24px', height: '100%' }}>
+                {[
+                  ['Time Recovered',  `${automateTasks.length * 2} hrs`],
+                  ['Automated Tasks', `${automateTasks.length} active`],
+                  ['Protect Tasks',   `${ownTasks.length} protected`],
+                ].map(([label, val]) => (
                   <div key={label} style={{ display: 'flex', flexDirection: 'column' }}>
                     <span style={{ fontSize: '0.625rem', fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</span>
                     <span style={{ fontSize: '1.5rem', fontWeight: 700 }}>{val}</span>
@@ -136,7 +172,9 @@ export default function Dashboard() {
             )}
             {statsCollapsed && (
               <div style={{ display: 'flex', alignItems: 'center', padding: '0 32px', height: '100%' }}>
-                <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)' }}>14 hrs recovered · 7 automated · 5 protected</span>
+                <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)' }}>
+                  {automateTasks.length * 2} hrs recovered · {automateTasks.length} automated · {ownTasks.length} protected
+                </span>
               </div>
             )}
             <button
@@ -150,10 +188,11 @@ export default function Dashboard() {
 
           {/* Panels */}
           <div className="panel-container">
-            {/* LEFT: Agent Root */}
+
+            {/* ── LEFT: Agent Root ──────────────────────────────────────────── */}
             <div
               className={`${leftClass} transition-all-custom`}
-              style={{ background: '#192120', borderRadius: '16px', overflow: 'hidden', display: 'flex', flexDirection: 'column', border: '1px solid rgba(87,66,58,0.1)', position: 'relative' }}
+              style={{ background: '#192120', borderRadius: '16px', overflow: 'hidden', display: 'flex', flexDirection: 'column', border: '1px solid rgba(87,66,58,0.1)' }}
             >
               {panelState !== 'focus-expanded' ? (
                 <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -170,41 +209,32 @@ export default function Dashboard() {
                     <button onClick={toggleLeft} className="material-symbols-outlined" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: '1.25rem' }}>open_in_full</button>
                   </div>
 
-                  {/* Sidebar content */}
+                  {/* Agent task list */}
                   <div style={{ flexGrow: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '32px' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      <h4 style={{ fontSize: '0.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.4)' }}>Working on</h4>
-                      {[
-                        { label: '📧 Writing Ugadi email subjects', progress: 80, count: '4/5', id: 'p1' },
-                        { label: '🖼 Resizing festive banners', progress: 100, count: '40/40', id: 'p2' },
-                      ].map(item => (
-                        <div key={item.id} style={{ background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.05)', padding: '16px', borderRadius: '12px' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                            <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>{item.label}</span>
-                            <span className="teal-text" style={{ fontSize: '0.625rem', fontWeight: 700 }}>{item.count}</span>
+                    <div>
+                      <h4 style={{ fontSize: '0.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.4)', marginBottom: '12px' }}>Working on</h4>
+                      {automateTasks.map((t, i) => {
+                        const prog = taskProgress(t.id ?? i)
+                        return (
+                          <div key={t.id ?? i} className="agent-task-card">
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                              <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>⚙️ {t.task}</span>
+                              <span className="teal-text" style={{ fontSize: '0.625rem', fontWeight: 700, flexShrink: 0, marginLeft: '8px' }}>{prog}%</span>
+                            </div>
+                            <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '9999px', overflow: 'hidden', marginBottom: '12px' }}>
+                              <div className="teal-bg progress-fill" style={{ height: '100%', width: `${prog}%` }} />
+                            </div>
+                            <button style={{ fontSize: '0.625rem', fontWeight: 700, color: '#D4622A', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              View work <span className="material-symbols-outlined" style={{ fontSize: '0.75rem' }}>arrow_forward</span>
+                            </button>
                           </div>
-                          <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '9999px', overflow: 'hidden', marginBottom: '12px' }}>
-                            <div className="teal-bg progress-fill" style={{ height: '100%', width: `${item.progress}%` }} />
-                          </div>
-                          <button style={{ fontSize: '0.625rem', fontWeight: 700, color: '#D4622A', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            View work <span className="material-symbols-outlined" style={{ fontSize: '0.75rem' }}>arrow_forward</span>
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      <h4 style={{ fontSize: '0.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.4)' }}>Done</h4>
-                      {['Email subjects — 5 generated', '40 banners resized', 'CSV sent to agency'].map(item => (
-                        <div key={item} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.875rem', color: 'rgba(255,255,255,0.4)' }}>
-                          <span className="material-symbols-outlined teal-text" style={{ fontSize: '0.875rem' }}>check</span>
-                          <span>{item}</span>
-                        </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                 </div>
               ) : (
-                /* Slim strip for agent when focus is expanded */
+                /* Slim strip */
                 <div onClick={toggleLeft} style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 0', justifyContent: 'space-between', borderLeft: '1px solid rgba(45,212,191,0.3)', cursor: 'pointer' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
                     <div style={{ width: '8px', height: '8px', background: '#4ade80', borderRadius: '50%' }} />
@@ -216,10 +246,10 @@ export default function Dashboard() {
               )}
             </div>
 
-            {/* RIGHT: Your Focus */}
+            {/* ── RIGHT: Your Focus ────────────────────────────────────────── */}
             <div
               className={`${rightClass} transition-all-custom`}
-              style={{ background: '#192120', borderRadius: '16px', overflow: 'hidden', display: 'flex', flexDirection: 'column', border: '1px solid rgba(87,66,58,0.1)', position: 'relative' }}
+              style={{ background: '#192120', borderRadius: '16px', overflow: 'hidden', display: 'flex', flexDirection: 'column', border: '1px solid rgba(87,66,58,0.1)' }}
             >
               {panelState !== 'agent-expanded' ? (
                 <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -244,24 +274,16 @@ export default function Dashboard() {
                         <button onClick={toggleRight} className="material-symbols-outlined" style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', fontSize: '1.25rem' }}>open_in_full</button>
                       </div>
                     </div>
-                    {/* Task pills */}
+
+                    {/* Dynamic task pills from ownTasks */}
                     <div className="hide-scrollbar" style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
-                      {[
-                        { label: 'Pivot visual language', question: 'Why are Hubli creatives not resonating?' },
-                        { label: 'Analyse Hubli leads', question: 'What is causing the Hubli lead drop?' },
-                        { label: 'Map competitor pricing', question: 'How does our pricing compare in Mangaluru?' },
-                      ].map(item => (
+                      {ownTasks.map((task, i) => (
                         <button
-                          key={item.label}
-                          onClick={() => { setActiveTask(item.question); setShowResponse(false) }}
-                          style={{
-                            flexShrink: 0, padding: '8px 16px', borderRadius: '9999px', fontSize: '0.6875rem', fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s', whiteSpace: 'nowrap',
-                            ...(activeTask === item.question
-                              ? { background: '#D4622A', border: '1px solid #D4622A', color: 'white' }
-                              : { background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.4)' })
-                          }}
+                          key={task.id ?? i}
+                          className={`pill-btn ${activePillIndex === i ? 'pill-active' : 'pill-inactive'}`}
+                          onClick={() => setActivePillIndex(i)}
                         >
-                          {item.label}
+                          {task.task}
                         </button>
                       ))}
                     </div>
@@ -269,18 +291,18 @@ export default function Dashboard() {
 
                   {/* Tab content */}
                   <div style={{ flexGrow: 1, overflowY: 'auto', padding: '40px' }}>
-                    {/* Insights tab */}
+
+                    {/* Insights */}
                     {activeTab === 'insights' && (
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', maxWidth: '672px', margin: '0 auto', width: '100%', gap: '48px' }}>
-                        <h4 style={{ fontSize: 'clamp(1.75rem, 3vw, 2.25rem)', fontWeight: 300, textAlign: 'center', lineHeight: 1.4 }}>
-                          {activeTask.includes('Hubli creatives') ? (
-                            <>Why are <span style={{ color: '#D4622A', fontWeight: 700 }}>Hubli creatives</span> not resonating?</>
-                          ) : activeTask.includes('lead drop') ? (
-                            <>What is causing the <span style={{ color: '#D4622A', fontWeight: 700 }}>Hubli lead drop</span>?</>
-                          ) : (
-                            <>How does our pricing compare in <span style={{ color: '#D4622A', fontWeight: 700 }}>Mangaluru</span>?</>
+                        <h4 style={{ fontSize: 'clamp(1.5rem, 2.5vw, 2rem)', fontWeight: 300, textAlign: 'center', lineHeight: 1.5, color: '#dce4e2' }}>
+                          {activeQuestion.split(activePillTask).map((part, i, arr) =>
+                            i < arr.length - 1
+                              ? <span key={i}>{part}<span style={{ color: '#D4622A', fontWeight: 700 }}>{activePillTask}</span></span>
+                              : <span key={i}>{part}</span>
                           )}
                         </h4>
+
                         <div style={{ width: '100%', position: 'relative' }}>
                           <input
                             className="notebook-input"
@@ -299,13 +321,15 @@ export default function Dashboard() {
                             arrow_forward
                           </button>
                         </div>
+
                         {showResponse && (
                           <div style={{ width: '100%', background: '#1A1208', borderLeft: '4px solid #D4622A', padding: '24px', borderRadius: '0 12px 12px 0' }}>
                             <p style={{ color: 'rgba(255,255,255,0.8)', fontStyle: 'italic', lineHeight: 1.6 }}>
-                              "Checking regional engagement data... It seems the 'Coastal Ochre' palette is outperforming 'Golden Temple' specifically in north Karnataka. Shall I swap the banner backgrounds?"
+                              "Analysing patterns related to <strong>{activePillTask}</strong>... Your instinct is noted. Shall I surface relevant data signals?"
                             </p>
                           </div>
                         )}
+
                         <button
                           onClick={() => navigate('/whiteboard')}
                           style={{ width: '100%', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #D4622A', color: '#D4622A', fontWeight: 700, borderRadius: '12px', background: 'transparent', cursor: 'pointer', transition: 'all 0.2s', marginTop: '32px' }}
@@ -315,13 +339,13 @@ export default function Dashboard() {
                       </div>
                     )}
 
-                    {/* Signals tab */}
+                    {/* Signals */}
                     {activeTab === 'signals' && (
                       <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '576px', margin: '0 auto', width: '100%' }}>
                         <h5 style={{ fontSize: '0.625rem', textTransform: 'uppercase', fontWeight: 900, letterSpacing: '0.2em', color: 'rgba(255,255,255,0.3)', marginBottom: '32px' }}>Active Market Signals</h5>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px' }}>
                           {signals.map((sig, i) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '20px', borderRadius: '12px', border: '1px solid rgba(87,66,58,0.1)', background: 'rgba(255,255,255,0.05)', cursor: 'pointer' }}>
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '20px', borderRadius: '12px', border: '1px solid rgba(87,66,58,0.1)', background: 'rgba(255,255,255,0.05)' }}>
                               <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,0.1)', fontSize: '1.25rem' }}>check_circle</span>
                               <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>{sig}</span>
                             </div>
@@ -338,7 +362,7 @@ export default function Dashboard() {
                       </div>
                     )}
 
-                    {/* Next tab */}
+                    {/* Next */}
                     {activeTab === 'next' && (
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
                         <div style={{ background: 'rgba(212,98,42,0.05)', border: '1px solid rgba(212,98,42,0.2)', borderRadius: '16px', padding: '48px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '32px', boxShadow: '0 0 40px rgba(212,98,42,0.1)', maxWidth: '400px' }}>
@@ -359,16 +383,17 @@ export default function Dashboard() {
                   </div>
                 </div>
               ) : (
-                /* Slim strip for focus when agent is expanded */
+                /* Focus slim strip */
                 <div onClick={toggleRight} style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px 0', justifyContent: 'space-between', borderLeft: '1px solid rgba(212,98,42,0.3)', cursor: 'pointer' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
-                    <span style={{ background: 'rgba(212,98,42,0.2)', color: '#D4622A', fontSize: '0.625rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px' }}>3</span>
+                    <span style={{ background: 'rgba(212,98,42,0.2)', color: '#D4622A', fontSize: '0.625rem', fontWeight: 700, padding: '2px 8px', borderRadius: '9999px' }}>{ownTasks.length}</span>
                   </div>
                   <div className="vertical-text" style={{ fontSize: '0.875rem', fontWeight: 700, letterSpacing: '0.2em', color: 'rgba(255,255,255,0.4)' }}>YOUR FOCUS</div>
                   <div />
                 </div>
               )}
             </div>
+
           </div>
         </div>
       </main>
