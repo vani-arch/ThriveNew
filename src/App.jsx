@@ -4,6 +4,9 @@ import Home from './screens/Home'
 import Tasks from './screens/Tasks'
 import Dashboard from './screens/Dashboard'
 import Whiteboard from './screens/Whiteboard'
+import Plan from './screens/Plan'
+import Focus from './screens/Focus'
+import Me from './screens/Me'
 
 export default function App() {
   return (
@@ -14,6 +17,9 @@ export default function App() {
         <Route path="/tasks" element={<Tasks />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/whiteboard" element={<Whiteboard />} />
+        <Route path="/plan" element={<Plan />} />
+        <Route path="/focus" element={<Focus />} />
+        <Route path="/me" element={<Me />} />
       </Routes>
     </BrowserRouter>
   )

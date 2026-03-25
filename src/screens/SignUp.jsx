@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { createUserWithEmailAndPassword } from 'firebase/auth'
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'
 import { auth } from '../firebase'
 
 export default function SignUp() {
   const navigate = useNavigate()
 
+  const [isLogin,   setIsLogin]   = useState(false)
   const [fullName,  setFullName]  = useState('')
   const [email,     setEmail]     = useState('')
   const [linkedin,  setLinkedin]  = useState('')
@@ -23,19 +24,25 @@ export default function SignUp() {
       setError('Email and password are required.')
       return
     }
-    if (password.length < 6) {
+    if (!isLogin && password.length < 6) {
       setError('Password must be at least 6 characters.')
       return
     }
 
     setIsLoading(true)
     try {
-      await createUserWithEmailAndPassword(auth, email.trim(), password)
-      // Persist the user's name for personalised greeting on Home screen
-      if (fullName.trim()) localStorage.setItem('userName', fullName.trim())
-      navigate('/home')
+      if (isLogin) {
+        await signInWithEmailAndPassword(auth, email.trim(), password.trim())
+        navigate('/dashboard')
+      } else {
+        await createUserWithEmailAndPassword(auth, email.trim(), password.trim())
+        // Persist the user's name for personalised greeting on Home screen
+        if (fullName.trim()) localStorage.setItem('userName', fullName.trim())
+        navigate('/home')
+      }
     } catch (err) {
-      setError(friendlyError(err.code))
+      console.log('Firebase Auth Error:', err)
+      setError(friendlyError(err.code || err.message, isLogin))
     } finally {
       setIsLoading(false)
     }
@@ -133,14 +140,15 @@ export default function SignUp() {
           <div style={{ background: 'rgba(25,33,32,0.7)', backdropFilter: 'blur(20px)', border: '1px solid rgba(87,66,58,0.15)', padding: '40px', borderRadius: '12px', boxShadow: '0 20px 40px rgba(0,0,0,0.4)' }}>
 
             <div style={{ marginBottom: '28px' }}>
-              <h2 style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.04em', color: '#dce4e2', marginBottom: '8px' }}>Create your account</h2>
-              <p style={{ fontSize: '0.875rem', color: '#dec0b5' }}>Give grunt work to AI. Discover what only you can do.</p>
+              <h2 style={{ fontSize: '1.5rem', fontWeight: 800, letterSpacing: '-0.04em', color: '#dce4e2', marginBottom: '8px' }}>{isLogin ? 'Welcome back' : 'Create your account'}</h2>
+              <p style={{ fontSize: '0.875rem', color: '#dec0b5' }}>{isLogin ? 'Sign in to review your dashboard.' : 'Give grunt work to AI. Discover what only you can do.'}</p>
             </div>
 
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }} noValidate>
 
-              {/* Full Name */}
-              <Field label="Full Name" htmlFor="full_name" icon="person">
+              {/* Full Name (Signup only) */}
+              {!isLogin && (
+                <Field label="Full Name" htmlFor="full_name" icon="person">
                 <input
                   className="signup-input"
                   id="full_name"
@@ -150,7 +158,8 @@ export default function SignUp() {
                   onChange={e => setFullName(e.target.value)}
                   autoComplete="name"
                 />
-              </Field>
+                </Field>
+              )}
 
               {/* Email */}
               <Field label="Email" htmlFor="signup_email" icon="mail">
@@ -191,8 +200,9 @@ export default function SignUp() {
                 </button>
               </Field>
 
-              {/* LinkedIn (optional) */}
-              <Field label="LinkedIn URL (optional)" htmlFor="signup_linkedin" icon="link">
+              {/* LinkedIn (optional - Signup only) */}
+              {!isLogin && (
+                <Field label="LinkedIn URL (optional)" htmlFor="signup_linkedin" icon="link">
                 <input
                   className="signup-input"
                   id="signup_linkedin"
@@ -202,14 +212,7 @@ export default function SignUp() {
                   onChange={e => setLinkedin(e.target.value)}
                   autoComplete="url"
                 />
-              </Field>
-
-              {/* Error message */}
-              {error && (
-                <div className="error-box" role="alert">
-                  <span className="material-symbols-outlined" style={{ color: '#f87171', fontSize: '1.125rem', flexShrink: 0, marginTop: '1px' }}>error</span>
-                  <p style={{ color: '#fca5a5', fontSize: '0.875rem', lineHeight: 1.5 }}>{error}</p>
-                </div>
+                </Field>
               )}
 
               {/* Submit */}
@@ -223,25 +226,36 @@ export default function SignUp() {
                   {isLoading ? (
                     <>
                       <div className="spin-ring" />
-                      <span>Creating account…</span>
+                      <span>{isLogin ? 'Signing in…' : 'Creating account…'}</span>
                     </>
                   ) : (
                     <>
-                      <span>Get Started</span>
+                      <span>{isLogin ? 'Log in' : 'Get Started'}</span>
                       <span className="material-symbols-outlined" style={{ fontSize: '1.25rem' }}>arrow_forward</span>
                     </>
                   )}
                 </button>
               </div>
-            </form>
 
-            {/* Footer link */}
-            <div style={{ marginTop: '28px', textAlign: 'center' }}>
-              <p style={{ fontSize: '0.875rem', color: 'rgba(222,192,181,0.6)' }}>
-                Already have an account?{' '}
-                <a href="#" style={{ color: '#ffb596', fontWeight: 700, textDecoration: 'none' }}>Sign In</a>
-              </p>
-            </div>
+              {/* Mode Toggle inside the form directly below submit */}
+              <div style={{ textAlign: 'center', marginTop: '8px' }}>
+                <button 
+                  type="button" 
+                  onClick={() => { setIsLogin(!isLogin); setError(''); }} 
+                  style={{ color: '#ffb596', fontWeight: 700, textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0, font: 'inherit', fontSize: '0.875rem' }}
+                >
+                  {isLogin ? "Don't have an account? Sign up" : "Already have an account? Log in"}
+                </button>
+              </div>
+
+              {/* Error message now shown BELOW the toggle/button */}
+              {error && (
+                <div className="error-box" role="alert" style={{ marginTop: '8px' }}>
+                  <span className="material-symbols-outlined" style={{ color: '#f87171', fontSize: '1.125rem', flexShrink: 0, marginTop: '1px' }}>error</span>
+                  <p style={{ color: '#fca5a5', fontSize: '0.875rem', lineHeight: 1.5 }}>{error}</p>
+                </div>
+              )}
+            </form>
           </div>
 
           {/* Trust badges */}
@@ -289,15 +303,19 @@ function Field({ label, htmlFor, icon, children }) {
 }
 
 // ─── Map Firebase error codes to human-friendly messages ─────────────────────
-function friendlyError(code) {
+function friendlyError(code, isLogin) {
   const map = {
-    'auth/email-already-in-use':    'This email is already registered. Try signing in instead.',
+    'auth/email-already-in-use':    'This email is already registered. Try logging in instead.',
     'auth/invalid-email':            'Please enter a valid email address.',
+    'auth/invalid-credential':       'Incorrect email or password. Please try again.',
+    'auth/invalid-login-credentials':'Incorrect email or password. Please try again.',
+    'auth/user-not-found':           'User not found. Please sign up first.',
+    'auth/wrong-password':           'Incorrect password. Please try again.',
     'auth/weak-password':            'Password is too weak. Use at least 6 characters.',
     'auth/network-request-failed':   'Network error. Check your connection and try again.',
     'auth/too-many-requests':        'Too many attempts. Please wait a moment and try again.',
     'auth/operation-not-allowed':    'Email sign-up is not enabled. Contact support.',
     'auth/invalid-api-key':          'Firebase API key is missing or invalid. Check your .env file.',
   }
-  return map[code] ?? `Sign-up failed (${code ?? 'unknown error'}). Please try again.`
+  return map[code] ?? `${isLogin ? 'Login' : 'Sign-up'} failed (${code ?? 'unknown error'}). Please try again.`
 }

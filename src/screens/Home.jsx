@@ -1,55 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useRef, useState, useEffect, useCallback } from 'react'
-
-// ─── Replace with your real key or load from .env as VITE_CLAUDE_API_KEY ────
-const CLAUDE_API_KEY = import.meta.env.VITE_CLAUDE_API_KEY || 'YOUR_CLAUDE_API_KEY'
-
-const FALLBACK_TASKS = [
-  { id: 1,  task: 'Resize 40 festive Ugadi banners',           category: 'automate' },
-  { id: 2,  task: 'Generate UTM links for 12 influencers',      category: 'automate' },
-  { id: 3,  task: 'Format media spend CSV for agency',          category: 'automate' },
-  { id: 4,  task: 'Pull Mangaluru lead drop data',              category: 'automate' },
-  { id: 5,  task: 'Schedule launch day social posts',           category: 'automate' },
-  { id: 6,  task: 'Export competitor ad spend report',          category: 'automate' },
-  { id: 7,  task: 'Generate Ugadi emailer subject lines',       category: 'automate' },
-  { id: 8,  task: 'Pivot visual language to Coastal identity',  category: 'own' },
-  { id: 9,  task: 'Analyse why Hubli leads dropped 18%',        category: 'own' },
-  { id: 10, task: 'Map competitor local pricing strategy',      category: 'own' },
-  { id: 11, task: 'Build CFO briefing on Mangaluru campaign',   category: 'own' },
-  { id: 12, task: 'Define Regional Soul creative direction',    category: 'own' },
-]
-
-async function generateTasks(userInput) {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': CLAUDE_API_KEY,
-      'anthropic-version': '2023-06-01',
-      // Required header to allow direct browser → Anthropic API calls (bypasses CORS restriction)
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
-      system: `You are Thrivee. Extract exactly 12 tasks from the user input.
-Return ONLY a raw JSON array. No markdown. No explanation. No code blocks.
-Each item: { "id": number, "task": string, "category": string }
-category must be exactly "automate" or "own".
-Exactly 7 automate, 5 own.
-Task names max 8 words.`,
-      messages: [{ role: 'user', content: userInput }],
-    }),
-  })
-
-  if (!response.ok) throw new Error(`Claude API error: ${response.status}`)
-
-  const data = await response.json()
-  const text = data.content[0].text
-  // Strip any accidental markdown fences before parsing
-  const clean = text.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim()
-  return JSON.parse(clean)
-}
+// Inline generateTasks removed, now delegating to /api/generate-tasks
 
 export default function Home() {
   const navigate  = useNavigate()
@@ -57,9 +8,7 @@ export default function Home() {
   const [isRecording, setIsRecording] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [loadingPhase, setLoadingPhase] = useState('') // 'reading' | 'sorting'
-  const [inputText, setInputText] = useState(
-    `Resize 40 festive Ugadi banners, Pivot visual language to Coastal identity, Generate UTM links for 12 influencers, Analyse why Hubli leads dropped 18%, Format media spend CSV for agency, Build CFO briefing on Mangaluru campaign, Pull Mangaluru lead drop data, Define Regional Soul creative direction, Schedule launch day social posts, Map competitor local pricing strategy, Export competitor ad spend report, Generate Ugadi emailer subject lines`
-  )
+  const [inputText, setInputText] = useState('')
   // Stores the committed (final) text so interim results don't overwrite it
   const committedTextRef = useRef(inputText)
   const recognitionRef = useRef(null)
@@ -156,7 +105,7 @@ export default function Home() {
   }
 
   const handleSort = async () => {
-    if (isLoading) return
+    if (isLoading || !inputText.trim()) return
 
     // Stop mic if still running
     if (recognitionRef.current) stopRecognition()
@@ -164,15 +113,33 @@ export default function Home() {
     setIsLoading(true)
     setLoadingPhase('reading')
 
-    let tasks = FALLBACK_TASKS
+    let tasks = []
     try {
       // Brief pause so 'Reading your day…' is visible before the fetch starts
       await new Promise(r => setTimeout(r, 600))
       setLoadingPhase('sorting')
-      tasks = await generateTasks(inputText)
+      
+      const response = await fetch('/api/generate-tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: inputText })
+      })
+      
+      if (!response.ok) {
+        let errText = "Server Error"
+        try { const errObj = await response.json(); errText = errObj.error } catch(_) {}
+        throw new Error(errText)
+      }
+      
+      const data = await response.json()
+      if (data.error) throw new Error(data.error)
+      
+      tasks = data
     } catch (err) {
-      console.warn('Claude API failed, using fallback tasks:', err.message)
-      tasks = FALLBACK_TASKS
+      console.warn('API failed:', err.message)
+      alert(`API Error: ${err.message}`)
+      setIsLoading(false)
+      return
     }
 
     setIsLoading(false)
@@ -303,6 +270,7 @@ export default function Home() {
           <div style={{ position: 'relative' }}>
             <textarea
               className="home-textarea"
+              placeholder="What's on your plate today? Add your tasks, separated by commas..."
               value={inputText}
               onChange={handleTextChange}
               style={{ width: '100%', height: '320px', borderRadius: '16px', padding: '32px', color: '#dec0b5', fontSize: '1.0625rem', lineHeight: 1.65 }}
@@ -361,14 +329,17 @@ export default function Home() {
       {/* Bottom Mobile Nav */}
       <nav style={{ display: 'flex', position: 'fixed', bottom: 0, left: 0, width: '100%', justifyContent: 'space-around', alignItems: 'center', padding: '0 16px 24px', paddingTop: '8px', background: 'rgba(13,21,20,0.8)', backdropFilter: 'blur(12px)', zIndex: 50 }}>
         {[
-          { icon: 'wb_sunny', label: 'Today', active: true },
-          { icon: 'calendar_today', label: 'Plan', active: false },
-          { icon: 'timer', label: 'Focus', active: false },
-          { icon: 'person', label: 'Me', active: false },
+          { icon: 'wb_sunny', label: 'Today', path: '/dashboard', active: false },
+          { icon: 'calendar_today', label: 'Plan', path: '/plan', active: window.location.pathname === '/plan' },
+          { icon: 'timer', label: 'Focus', path: '/focus', active: window.location.pathname === '/focus' },
+          { icon: 'person', label: 'Me', path: '/me', active: window.location.pathname === '/me' },
         ].map(item => (
-          <div key={item.label} style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '12px',
-            ...(item.active ? { background: 'linear-gradient(135deg, #ffb596, #e56e36)', color: 'white', borderRadius: '12px', boxShadow: '0 4px 15px rgba(212,98,42,0.4)' } : { color: '#dec0b5' }),
+          <div 
+             key={item.label} 
+             onClick={() => navigate(item.path)}
+             style={{
+               cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '12px',
+               ...(item.active ? { background: 'linear-gradient(135deg, #ffb596, #e56e36)', color: 'white', borderRadius: '12px', boxShadow: '0 4px 15px rgba(212,98,42,0.4)' } : { color: '#dec0b5' }),
           }}>
             <span className="material-symbols-outlined">{item.icon}</span>
             <span style={{ fontSize: '0.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: '4px' }}>{item.label}</span>
