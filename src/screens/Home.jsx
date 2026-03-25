@@ -1,10 +1,13 @@
 import { useNavigate } from 'react-router-dom'
 import { useRef, useState, useEffect, useCallback } from 'react'
+import { auth } from '../firebase'
 // Inline generateTasks removed, now delegating to /api/generate-tasks
 
 export default function Home() {
   const navigate  = useNavigate()
-  const userName  = localStorage.getItem('userName') || 'Megha'
+  const user = auth.currentUser
+  const rawName = user?.displayName || (user?.email ? user.email.split('@')[0].split('.')[0] : 'Megha')
+  const userName = rawName.charAt(0).toUpperCase() + rawName.slice(1)
   const [isRecording, setIsRecording] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [loadingPhase, setLoadingPhase] = useState('') // 'reading' | 'sorting'
@@ -135,14 +138,17 @@ export default function Home() {
       if (data.error) throw new Error(data.error)
       
       tasks = data
+      console.log('[Home.jsx] Tasks array prepared for navigation:', tasks)
+      try { localStorage.setItem('thrivee_tasks', JSON.stringify(tasks)) } catch (e) {}
     } catch (err) {
-      console.warn('API failed:', err.message)
+      console.error('API or parsing failed:', err)
       alert(`API Error: ${err.message}`)
       setIsLoading(false)
       return
     }
 
     setIsLoading(false)
+    console.log('[Home.jsx] Navigating to /tasks with state:', { tasks })
     navigate('/tasks', { state: { tasks } })
   }
 
@@ -330,7 +336,7 @@ export default function Home() {
       <nav style={{ display: 'flex', position: 'fixed', bottom: 0, left: 0, width: '100%', justifyContent: 'space-around', alignItems: 'center', padding: '0 16px 24px', paddingTop: '8px', background: 'rgba(13,21,20,0.8)', backdropFilter: 'blur(12px)', zIndex: 50 }}>
         {[
           { icon: 'wb_sunny', label: 'Today', path: '/dashboard', active: false },
-          { icon: 'calendar_today', label: 'Plan', path: '/plan', active: window.location.pathname === '/plan' },
+          { icon: 'calendar_today', label: 'Library', path: '/plan', active: window.location.pathname === '/plan' },
           { icon: 'timer', label: 'Focus', path: '/focus', active: window.location.pathname === '/focus' },
           { icon: 'person', label: 'Me', path: '/me', active: window.location.pathname === '/me' },
         ].map(item => (
@@ -350,6 +356,7 @@ export default function Home() {
       {/* Background blobs */}
       <div style={{ position: 'fixed', top: '25%', left: '-96px', width: '384px', height: '384px', background: 'rgba(255,181,150,0.05)', borderRadius: '50%', filter: 'blur(120px)', pointerEvents: 'none' }} />
       <div style={{ position: 'fixed', bottom: '25%', right: '-96px', width: '320px', height: '320px', background: 'rgba(229,110,54,0.05)', borderRadius: '50%', filter: 'blur(100px)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', top: '-100px', right: '-100px', width: '400px', height: '400px', borderRadius: '50%', border: '1px solid rgba(212, 98, 42, 0.06)', pointerEvents: 'none' }} />
     </div>
   )
 }

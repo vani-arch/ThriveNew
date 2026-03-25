@@ -1,20 +1,15 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
+import { auth } from '../firebase'
 
 // ─── Fallback used when navigated to directly (no API tasks in state) ─────────
 const FALLBACK_TASKS = [
-  { id: 1,  text: 'Resize 40 festive Ugadi banners',           type: 'automate' },
-  { id: 2,  text: 'Pivot visual language to Coastal identity',  type: 'own'      },
-  { id: 3,  text: 'Generate UTM links for 12 influencers',      type: 'automate' },
-  { id: 4,  text: 'Analyse why Hubli leads dropped 18%',        type: 'own'      },
-  { id: 5,  text: 'Format media spend CSV for agency',          type: 'automate' },
-  { id: 6,  text: 'Build CFO briefing on Mangaluru campaign',   type: 'own'      },
-  { id: 7,  text: 'Pull Mangaluru lead drop data',              type: 'automate' },
-  { id: 8,  text: 'Define Regional Soul creative direction',    type: 'own'      },
-  { id: 9,  text: 'Schedule launch day social posts',           type: 'automate' },
-  { id: 10, text: 'Map competitor local pricing strategy',      type: 'own'      },
-  { id: 11, text: 'Export competitor ad spend report',          type: 'automate' },
-  { id: 12, text: 'Generate Ugadi emailer subject lines',       type: 'automate' },
+  { id: 1,  text: 'Resize 40 festive Ugadi banners',           category: 'hand-to-ai', reason: 'Highly repeatable format updates.', time_estimate: '30 mins', urgency: 'low' },
+  { id: 2,  text: 'Pivot visual language to Coastal identity', category: 'protect', reason: 'Core brand and judgment required.', time_estimate: '2 hrs', urgency: 'high' },
+  { id: 3,  text: 'Generate UTM links for 12 influencers',     category: 'hand-to-ai', reason: 'Mechanical data entry mapping.', time_estimate: '15 mins', urgency: 'medium' },
+  { id: 4,  text: 'Analyse why Hubli leads dropped 18%',       category: 'protect', reason: 'Context-heavy strategic analysis.', time_estimate: '1.5 hrs', urgency: 'high' },
+  { id: 5,  text: 'Format media spend CSV for agency',         category: 'hand-to-ai', reason: 'Basic predictable spreadsheet cleanup.', time_estimate: '45 mins', urgency: 'low' },
+  { id: 6,  text: 'Build CFO briefing on Mangaluru campaign',  category: 'protect', reason: 'Internal stakeholder relationship management.', time_estimate: '1 hr', urgency: 'high' },
 ]
 
 // Animation phases:  idle → flying → sorted
@@ -26,45 +21,113 @@ export default function Tasks() {
   const navigate  = useNavigate()
   const location  = useLocation()
 
-  // Normalise from Claude API shape {task,category} or fallback shape {text,type}
-  const TASKS = (location.state?.tasks ?? FALLBACK_TASKS).map((t, i) => ({
-    id:   t.id ?? i + 1,
-    text: t.task ?? t.text,
-    type: t.category ?? t.type,
+  const user = auth.currentUser
+  const rawName = user?.displayName || (user?.email ? user.email.split('@')[0].split('.')[0] : 'Megha')
+  const userName = rawName.charAt(0).toUpperCase() + rawName.slice(1)
+
+  // Normalise from Claude API shape
+  const getInitialTasks = () => {
+    if (location.state?.tasks) return location.state.tasks
+    try {
+      const stored = localStorage.getItem('thrivee_tasks')
+      if (stored) return JSON.parse(stored)
+    } catch(e) {}
+    return FALLBACK_TASKS
+  }
+
+  const TASKS = getInitialTasks().map((t, i) => ({
+    id:            t.id ?? i + 1,
+    text:          t.text ?? t.task,
+    category:      t.category ?? t.type ?? 'protect',
+    reason:        t.reason || 'Strategic priority.',
+    time_estimate: t.time_estimate || '1 hr',
+    urgency:       (t.urgency || 'medium').toLowerCase(),
   }))
 
-  const aiTasks  = TASKS.filter(t => t.type === 'automate')
-  const ownTasks = TASKS.filter(t => t.type === 'own')
+  const handToAI = TASKS.filter(t => t.category === 'hand-to-ai' || t.category === 'automate')
+  const protect  = TASKS.filter(t => t.category === 'protect' || t.category === 'own')
 
   // phase: 'idle' | 'flying' | 'sorted'
   const [phase, setPhase] = useState('idle')
-  // Per-card fly direction: populated right before the flying phase
+  // Per-card fly direction
   const [flyMap, setFlyMap] = useState({}) // { [id]: 'left' | 'right' }
-  const cardRefs = useRef({})              // DOM refs for each unsorted card
+  const cardRefs = useRef({})
 
   const handleSort = () => {
     if (phase !== 'idle') return
 
-    // Build the fly direction map
     const map = {}
-    TASKS.forEach(t => { map[t.id] = t.type === 'automate' ? 'left' : 'right' })
+    TASKS.forEach(t => { 
+      map[t.id] = (t.category === 'hand-to-ai' || t.category === 'automate') ? 'left' : 'right' 
+    })
     setFlyMap(map)
     setPhase('flying')
 
-    // After cards have flown off (400 ms), switch to the two-column view
+    // Transition to sorted
     setTimeout(() => setPhase('sorted'), 480)
   }
 
-  // Stagger the sorted column cards by triggering reflow once mounted
   const [sortedVisible, setSortedVisible] = useState(false)
+  const sessionSavedRef = useRef(false)
+
   useEffect(() => {
     if (phase === 'sorted') {
-      // Give React a frame to mount the sorted DOM before starting the animation
       requestAnimationFrame(() => setSortedVisible(true))
+
+      if (!sessionSavedRef.current) {
+        sessionSavedRef.current = true
+
+        let title = 'Tasks & more'
+        if (protect.length > 0) {
+          title = protect[0].text.split(' ').slice(0, 4).join(' ') + ' & more'
+        } else if (handToAI.length > 0) {
+          title = handToAI[0].text.split(' ').slice(0, 4).join(' ') + ' & more'
+        }
+
+        const session = {
+          id: Date.now().toString(),
+          title,
+          date: new Date().toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }),
+          tasks: TASKS,
+          stats: {
+            total: TASKS.length,
+            handToAI: handToAI.length,
+            protect: protect.length
+          }
+        }
+        
+        try {
+          const existing = JSON.parse(localStorage.getItem('thrivee_sessions') || '[]')
+          existing.unshift(session)
+          localStorage.setItem('thrivee_sessions', JSON.stringify(existing))
+        } catch (e) {
+          console.error('Failed to save session:', e)
+        }
+      }
     } else {
       setSortedVisible(false)
     }
-  }, [phase])
+  }, [phase, TASKS, handToAI.length, protect])
+
+  // Shared Card renderer to DRY up both phases
+  const renderCardContent = (task) => (
+    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', gap: '8px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+        <span style={{ fontWeight: 700, fontSize: '0.9375rem', lineHeight: 1.3 }}>{task.text}</span>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
+          <span style={{ fontSize: '0.75rem', color: '#a0aab2' }}>{task.time_estimate}</span>
+          <span style={{ 
+              fontSize: '0.625rem', padding: '2px 6px', borderRadius: '4px', textTransform: 'uppercase', fontWeight: 800,
+              backgroundColor: task.urgency === 'high' ? 'rgba(239,68,68,0.2)' : task.urgency === 'medium' ? 'rgba(245,158,11,0.2)' : 'rgba(34,197,94,0.2)',
+              color: task.urgency === 'high' ? '#ef4444' : task.urgency === 'medium' ? '#f59e0b' : '#22c55e'
+            }}>
+            {task.urgency}
+          </span>
+        </div>
+      </div>
+      <span style={{ fontSize: '0.8125rem', fontStyle: 'italic', color: '#a0aab2' }}>{task.reason}</span>
+    </div>
+  )
 
   return (
     <div style={{ backgroundColor: '#0f1716', color: '#dce4e2', fontFamily: "'Plus Jakarta Sans', sans-serif", minHeight: '100vh', overflowX: 'hidden' }}>
@@ -151,7 +214,7 @@ export default function Tasks() {
 
       {/* Header */}
       <header style={{ padding: '96px 24px 48px', textAlign: 'center', maxWidth: '896px', margin: '0 auto' }}>
-        <p style={{ color: '#dec0b5', fontSize: '0.875rem', letterSpacing: '0.2em', textTransform: 'uppercase', opacity: 0.8, marginBottom: '8px' }}>Megha, I found</p>
+        <p style={{ color: '#dec0b5', fontSize: '0.875rem', letterSpacing: '0.2em', textTransform: 'uppercase', opacity: 0.8, marginBottom: '8px' }}>{userName}, I found</p>
         <h1 style={{ fontSize: 'clamp(2.25rem, 6vw, 3.75rem)', fontWeight: 800, letterSpacing: '-0.04em', color: '#dce4e2', transition: 'all 0.4s ease' }}>
           {phase === 'sorted' ? 'Sorted' : `${TASKS.length} tasks in your day`}
         </h1>
@@ -162,9 +225,9 @@ export default function Tasks() {
 
         {/* UNSORTED / FLYING view — both idle and flying phases render this */}
         {phase !== 'sorted' && (
-          <div style={{ maxWidth: '600px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <div style={{ maxWidth: '700px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {TASKS.map(task => {
-              const isTeal   = task.type === 'automate'
+              const isTeal   = task.category === 'hand-to-ai' || task.category === 'automate'
               const flyClass = flyMap[task.id] === 'left'  ? 'fly-left'
                              : flyMap[task.id] === 'right' ? 'fly-right'
                              : ''
@@ -174,22 +237,7 @@ export default function Tasks() {
                   ref={el => { cardRefs.current[task.id] = el }}
                   className={`task-card ${isTeal ? 'border-teal' : 'border-orange'} ${flyClass}`}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    {/* Colored dot matches the border */}
-                    <span
-                      className="material-symbols-outlined"
-                      style={{ color: isTeal ? '#2dd4bf' : '#D4622A', fontSize: '1.25rem' }}
-                    >
-                      {isTeal ? 'settings' : 'local_fire_department'}
-                    </span>
-                    <span style={{ fontWeight: 500, fontSize: '0.9375rem' }}>{task.text}</span>
-                  </div>
-                  <span
-                    className="material-symbols-outlined"
-                    style={{ color: isTeal ? '#2dd4bf' : '#D4622A', fontSize: '1.125rem', fontVariationSettings: "'FILL' 1", flexShrink: 0 }}
-                  >
-                    check_circle
-                  </span>
+                  {renderCardContent(task)}
                 </div>
               )
             })}
@@ -198,7 +246,9 @@ export default function Tasks() {
 
         {/* SORTED two-column view */}
         {phase === 'sorted' && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '48px' }}>
+          <>
+            <div style={{ position: 'absolute', top: '10%', left: '50%', transform: 'translateX(-50%)', height: '80%', width: '1px', background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.06), transparent)', pointerEvents: 'none', zIndex: 0 }} />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '48px', position: 'relative', zIndex: 10 }}>
 
             {/* Left: Hand to AI */}
             <div>
@@ -207,22 +257,13 @@ export default function Tasks() {
                 <p style={{ color: 'rgba(220,228,226,0.5)', fontSize: '0.8125rem', marginTop: '4px' }}>Thrivee handles these</p>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {aiTasks.map((task, i) => (
+                {handToAI.map((task, i) => (
                   <div
                     key={task.id}
                     className={`sorted-card border-teal ${sortedVisible ? 'visible' : ''}`}
                     style={{ transitionDelay: `${60 + i * 70}ms` }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                      <span className="material-symbols-outlined" style={{ color: '#2dd4bf', fontSize: '1.125rem' }}>settings</span>
-                      <span style={{ fontWeight: 500, fontSize: '0.9375rem' }}>{task.text}</span>
-                    </div>
-                    <span
-                      className="material-symbols-outlined"
-                      style={{ color: '#2dd4bf', fontSize: '1.125rem', fontVariationSettings: "'FILL' 1", flexShrink: 0 }}
-                    >
-                      check_circle
-                    </span>
+                    {renderCardContent(task)}
                   </div>
                 ))}
               </div>
@@ -235,28 +276,20 @@ export default function Tasks() {
                 <p style={{ color: 'rgba(220,228,226,0.5)', fontSize: '0.8125rem', marginTop: '4px' }}>Only you can do these</p>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {ownTasks.map((task, i) => (
+                {protect.map((task, i) => (
                   <div
                     key={task.id}
                     className={`sorted-card border-orange ${sortedVisible ? 'visible' : ''}`}
                     style={{ transitionDelay: `${100 + i * 70}ms` }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                      <span className="material-symbols-outlined" style={{ color: '#D4622A', fontSize: '1.125rem' }}>local_fire_department</span>
-                      <span style={{ fontWeight: 500, fontSize: '0.9375rem' }}>{task.text}</span>
-                    </div>
-                    <span
-                      className="material-symbols-outlined"
-                      style={{ color: '#D4622A', fontSize: '1.125rem', fontVariationSettings: "'FILL' 1", flexShrink: 0 }}
-                    >
-                      check_circle
-                    </span>
+                    {renderCardContent(task)}
                   </div>
                 ))}
               </div>
             </div>
 
           </div>
+          </>
         )}
       </main>
 
@@ -287,8 +320,8 @@ export default function Tasks() {
               <button
                 className="delegate-btn action-btn"
                 onClick={() => {
-                  const automateTasks = TASKS.filter(t => t.type === 'automate').map(t => ({ id: t.id, task: t.text, category: 'automate' }))
-                  const ownTasks      = TASKS.filter(t => t.type === 'own').map(t => ({ id: t.id, task: t.text, category: 'own' }))
+                  const automateTasks = handToAI.map(t => ({ id: t.id, task: t.text, category: 'automate' }))
+                  const ownTasks      = protect.map(t => ({ id: t.id, task: t.text, category: 'own' }))
                   navigate('/dashboard?panel=agent', { state: { automateTasks, ownTasks, expandAgent: true } })
                 }}
                 style={{ width: '100%', maxWidth: '400px', padding: '16px 32px', borderRadius: '9999px', fontWeight: 700, color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 8px 24px rgba(74,158,150,0.35)', fontSize: '1rem' }}
@@ -300,8 +333,8 @@ export default function Tasks() {
               <button
                 className="think-btn action-btn"
                 onClick={() => {
-                  const automateTasks = TASKS.filter(t => t.type === 'automate').map(t => ({ id: t.id, task: t.text, category: 'automate' }))
-                  const ownTasks      = TASKS.filter(t => t.type === 'own').map(t => ({ id: t.id, task: t.text, category: 'own' }))
+                  const automateTasks = handToAI.map(t => ({ id: t.id, task: t.text, category: 'automate' }))
+                  const ownTasks      = protect.map(t => ({ id: t.id, task: t.text, category: 'own' }))
                   navigate('/dashboard?panel=focus', { state: { automateTasks, ownTasks, expandFocus: true } })
                 }}
                 style={{ width: '100%', maxWidth: '400px', padding: '16px 32px', borderRadius: '9999px', fontWeight: 700, color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 8px 24px rgba(212,98,42,0.35)', fontSize: '1rem' }}

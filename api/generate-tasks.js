@@ -64,6 +64,7 @@ Never add tasks they did not mention.
 Never drop tasks they did mention.`
 
   try {
+    console.log('[api/generate-tasks] Calling Claude API...')
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -79,22 +80,29 @@ Never drop tasks they did mention.`
       }),
     })
 
+    console.log(`[api/generate-tasks] Claude API returned status: ${response.status}`)
+
     if (!response.ok) {
       const errorText = await response.text()
+      console.error(`[api/generate-tasks] Claude API failed: ${errorText}`)
       return res.status(response.status).json({ error: `Claude API error: ${errorText}` })
     }
 
     const data = await response.json()
+    console.log('[api/generate-tasks] Successfully captured Claude response.')
     const text = data.content[0].text
     
     try {
       const clean = text.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim()
       const parsedTasks = JSON.parse(clean)
+      console.log(`[api/generate-tasks] Successfully parsed JSON: ${parsedTasks.length} tasks generated.`)
       return res.status(200).json(parsedTasks)
     } catch (parseError) {
+      console.error('[api/generate-tasks] JSON parsing failed. Text received was:', text)
       return res.status(500).json({ error: 'Failed to parse JSON response from Claude.' })
     }
   } catch (error) {
+    console.error('[api/generate-tasks] Fetch execution error:', error.message)
     return res.status(500).json({ error: error.message })
   }
 }

@@ -1,61 +1,312 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { ReactFlow, useNodesState, useEdgesState, addEdge, Handle, Position } from '@xyflow/react'
+import '@xyflow/react/dist/style.css'
 
-const SUGGESTIONS = [
-  { text: 'Is it the language?', chip: 'Kannada messaging', angle: -60 },
-  { text: 'Is it the creative?', chip: 'Local context', angle: -120 },
-  { text: 'Is it the offer?', chip: 'Discount relevance', angle: 120 },
-  { text: 'Local Competition?', chip: 'Speed vs Price', angle: 60 },
+const CentralNode = ({ data }) => {
+  return (
+    <>
+      <Handle type="source" position={Position.Top} className="custom-handle" />
+      <Handle type="source" position={Position.Right} className="custom-handle" />
+      <Handle type="source" position={Position.Bottom} className="custom-handle" />
+      <Handle type="source" position={Position.Left} className="custom-handle" />
+      
+      <div style={{ background: '#D4622A', padding: '40px', borderRadius: '12px', boxShadow: '0 20px 50px rgba(212,98,42,0.3)', width: '280px', maxWidth: '280px', textAlign: 'center', border: '1px solid rgba(212,98,42,0.2)', cursor: 'grab', transition: 'transform 0.3s' }}>
+        {data.isGenerating ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', color: '#ffb596' }}>
+            <div style={{ width: '20px', height: '20px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> Generating Mind Map...
+          </div>
+        ) : (
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.02em', color: 'white', wordWrap: 'break-word', overflowWrap: 'break-word' }}>
+            {data.text}<span className="cursor-blink">|</span>
+          </h1>
+        )}
+        {!data.isGenerating && <p style={{ color: 'rgba(220,228,226,0.4)', fontSize: '0.625rem', fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', marginTop: '24px' }}>Start anywhere.</p>}
+      </div>
+    </>
+  )
+}
+
+const IdeaNode = ({ id, data }) => {
+  return (
+    <>
+      <Handle type="source" position={Position.Top} className="custom-handle" />
+      <Handle type="source" position={Position.Right} className="custom-handle" />
+      <Handle type="source" position={Position.Bottom} className="custom-handle" />
+      <Handle type="source" position={Position.Left} className="custom-handle" />
+      
+      <div className="node-card" style={{ background: '#2e3635', padding: '16px', borderRadius: '8px', border: '1px solid rgba(87,66,58,0.3)', boxShadow: '0 10px 30px rgba(0,0,0,0.4)', minWidth: '180px', maxWidth: '220px', textAlign: 'center' }}>
+        {data.isEditing ? (
+          <textarea
+            className="nodrag"
+            autoFocus
+            onBlur={(e) => data.onBlur(id, e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) e.currentTarget.blur() }}
+            defaultValue={data.text}
+            placeholder="Type your thought..."
+            style={{ width: '100%', minHeight: '60px', background: 'transparent', border: 'none', color: '#dce4e2', outline: 'none', fontSize: '0.875rem', fontWeight: 700, textAlign: 'center', resize: 'none', fontFamily: 'inherit' }}
+          />
+        ) : (
+          <p onClick={() => data.onClick(id)} style={{ fontWeight: 700, fontSize: '0.875rem', wordWrap: 'break-word', overflowWrap: 'break-word', cursor: 'text' }}>
+            {data.text || 'Type your thought...'}
+          </p>
+        )}
+        <div style={{ marginTop: '8px', background: 'rgba(212,98,42,0.1)', color: '#D4622A', fontSize: '0.625rem', padding: '4px 8px', borderRadius: '9999px', display: 'inline-block', border: '1px solid rgba(212,98,42,0.2)', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
+          {data.chip}
+        </div>
+      </div>
+    </>
+  )
+}
+
+const nodeTypes = {
+  central: CentralNode,
+  idea: IdeaNode
+}
+
+const FIX_POSITIONS = [
+  { x: -280, y: -220 },
+  { x: 280, y: -220 },
+  { x: -280, y: 220 },
+  { x: 280, y: 220 },
 ]
 
 export default function Whiteboard() {
   const navigate = useNavigate()
   const [showAiPanel, setShowAiPanel] = useState(false)
-  const [nodes, setNodes] = useState([])
   const [showStartBtn, setShowStartBtn] = useState(true)
-  const [connections, setConnections] = useState([])
-  const canvasRef = useRef(null)
-  const nodeRefs = useRef({})
-
-  const updateConnections = () => {
-    if (!canvasRef.current) return
-    const rect = canvasRef.current.getBoundingClientRect()
-    const cx = rect.width / 2
-    const cy = rect.height / 2
-    const newConns = nodes.map((n, i) => {
-      const nodeEl = nodeRefs.current[i]
-      if (!nodeEl) return null
-      const nr = nodeEl.getBoundingClientRect()
-      const nx = nr.left - rect.left + nr.width / 2
-      const ny = nr.top - rect.top + nr.height / 2
-      return { x1: cx, y1: cy, x2: nx, y2: ny }
-    }).filter(Boolean)
-    setConnections(newConns)
-  }
+  
+  const [chatMessages, setChatMessages] = useState([
+    { role: 'assistant', content: "I'm analyzing your nodes. What's standing out to you?" }
+  ])
+  const [chatInput, setChatInput] = useState('')
+  const [isTyping, setIsTyping] = useState(false)
+  const chatScrollRef = useRef(null)
+  
+  const [agentCount, setAgentCount] = useState(0)
 
   useEffect(() => {
-    updateConnections()
-  }, [nodes, showAiPanel])
+    try {
+      const storedTasks = localStorage.getItem('thrivee_tasks')
+      if (storedTasks) {
+        const tasksList = JSON.parse(storedTasks)
+        setAgentCount(tasksList.filter(t => t.category === 'hand-to-ai').length)
+      }
+    } catch (e) {}
+  }, [])
 
-  useEffect(() => {
-    window.addEventListener('resize', updateConnections)
-    return () => window.removeEventListener('resize', updateConnections)
-  }, [nodes])
+  const [nodes, setNodes, onNodesChange] = useNodesState([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState([])
 
-  const handleStartingPoint = () => {
-    const radius = Math.min(window.innerWidth, window.innerHeight) * 0.3
-    const newNodes = SUGGESTIONS.map((s) => {
-      const rad = s.angle * (Math.PI / 180)
-      return { text: s.text, chip: s.chip, x: Math.cos(rad) * radius, y: Math.sin(rad) * radius }
+  const handleNodeClick = useCallback((id) => {
+    setNodes(nds => {
+      const updated = nds.map(n => n.id === id ? { ...n, data: { ...n.data, isEditing: true } } : n)
+      localStorage.setItem('thrivee_canvas_nodes', JSON.stringify(updated.filter(k => k.id !== 'central')))
+      return updated
     })
-    setNodes(newNodes)
-    setShowStartBtn(false)
-    setTimeout(updateConnections, 100)
+  }, [setNodes])
+
+  const handleNodeBlur = useCallback((id, newText) => {
+    setNodes(nds => {
+      const updated = nds.map(n => n.id === id ? { ...n, data: { ...n.data, text: newText, isEditing: false } } : n)
+      localStorage.setItem('thrivee_canvas_nodes', JSON.stringify(updated.filter(k => k.id !== 'central')))
+      return updated
+    })
+  }, [setNodes])
+
+  useEffect(() => {
+    const initializeCanvas = async () => {
+      const cWidth = 280; const cHeight = 200;
+      const cX = window.innerWidth / 2 - cWidth / 2;
+      const cY = window.innerHeight / 2 - cHeight / 2;
+
+      const buildNodes = (centralText, ideaItems, isGenerating) => {
+        const central = {
+          id: 'central',
+          type: 'central',
+          position: { x: cX, y: cY },
+          data: { text: centralText, isGenerating }
+        }
+        
+        const ideas = ideaItems.map((item, i) => {
+          const fallbackPos = FIX_POSITIONS[i % 4]
+          return {
+            id: item.id || `node-${Date.now()}-${i}`,
+            type: 'idea',
+            position: { 
+              x: item.x !== undefined ? item.x : cX + fallbackPos.x, 
+              y: item.y !== undefined ? item.y : cY + fallbackPos.y 
+            },
+            data: {
+              text: item.text, chip: item.chip, isEditing: item.isEditing || false,
+              onClick: handleNodeClick, onBlur: handleNodeBlur
+            }
+          }
+        })
+        
+        return [central, ...ideas]
+      }
+
+      try {
+        const storedCanvas = localStorage.getItem('thrivee_canvas')
+        const storedNodes = localStorage.getItem('thrivee_canvas_nodes')
+        if (storedCanvas && storedNodes) {
+          const parsedCanvas = JSON.parse(storedCanvas)
+          const parsedIdeas = JSON.parse(storedNodes).filter(n => n.id !== 'central')
+          
+          setNodes(buildNodes(parsedCanvas.central, parsedIdeas, false))
+          
+          const storedEdges = localStorage.getItem('thrivee_canvas_edges')
+          if (storedEdges) {
+            setEdges(JSON.parse(storedEdges))
+          } else {
+            const newEdges = parsedIdeas.map(idNode => ({
+              id: `e-central-${idNode.id || idNode.text}`,
+              source: 'central',
+              target: idNode.id,
+              style: { strokeDasharray: '4 4', stroke: '#D4622A', strokeWidth: 1.5, opacity: 0.8 },
+              animated: false
+            }))
+            setEdges(newEdges)
+            localStorage.setItem('thrivee_canvas_edges', JSON.stringify(newEdges))
+          }
+          setShowStartBtn(false)
+          return
+        }
+
+        const storedTasks = localStorage.getItem('thrivee_tasks')
+        if (!storedTasks) throw new Error('No tasks found')
+        
+        const tasksList = JSON.parse(storedTasks)
+        const firstProtect = tasksList.find(t => t.category === 'protect' || t.category === 'own')
+        if (!firstProtect) throw new Error('No protect task found')
+
+        setNodes([{ id: 'central', type: 'central', position: { x: cX, y: cY }, data: { text: "Generating Mind Map...", isGenerating: true } }])
+        
+        const res = await fetch('/api/generate-canvas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ taskText: firstProtect.text || firstProtect.task })
+        })
+
+        if (!res.ok) throw new Error(await res.text())
+        const data = await res.json()
+
+        const finalNodes = buildNodes(data.central, data.nodes.map(n => ({ text: n.question, chip: n.tag })), false)
+        const newEdges = finalNodes.filter(n => n.id !== 'central').map(idNode => ({
+          id: `e-central-${idNode.id}`,
+          source: 'central',
+          target: idNode.id,
+          style: { strokeDasharray: '4 4', stroke: '#D4622A', strokeWidth: 1.5, opacity: 0.8 },
+          animated: false
+        }))
+
+        localStorage.setItem('thrivee_canvas', JSON.stringify({ central: data.central }))
+        localStorage.setItem('thrivee_canvas_nodes', JSON.stringify(finalNodes.filter(n => n.id !== 'central')))
+        localStorage.setItem('thrivee_canvas_edges', JSON.stringify(newEdges))
+        
+        setNodes(finalNodes)
+        setEdges(newEdges)
+        setShowStartBtn(false)
+
+      } catch (e) {
+        console.error('Failed Canvas init:', e)
+        const cWidth = 280; const cHeight = 200;
+        setNodes([{ id: 'central', type: 'central', position: { x: window.innerWidth/2 - cWidth/2, y: window.innerHeight/2 - cHeight/2 }, data: { text: "Why are Hubli girls not signing up?", isGenerating: false } }])
+      }
+    }
+    
+    initializeCanvas()
+  }, [handleNodeClick, handleNodeBlur, setEdges, setNodes])
+
+  useEffect(() => {
+    if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight
+  }, [chatMessages, isTyping])
+
+  const handleSendMessage = async () => {
+    if (!chatInput.trim() || isTyping) return
+    const userMsg = { role: 'user', content: chatInput.trim() }
+    const newHistory = [...chatMessages, userMsg]
+    setChatMessages(newHistory)
+    setChatInput('')
+    setIsTyping(true)
+
+    let protectTasks = []
+    try {
+      const stored = localStorage.getItem('thrivee_tasks')
+      if (stored) {
+        protectTasks = JSON.parse(stored).filter(t => t.category === 'protect' || t.category === 'own').map(t => t.text || t.task)
+      }
+    } catch(e) {}
+
+    const centralNodeText = nodes.find(n => n.id === 'central')?.data.text || ""
+
+    try {
+      const res = await fetch('/api/thinking-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: newHistory, nodes: nodes.filter(n => n.id !== 'central').map(n => n.data), centralNodeText, protectTasks })
+      })
+      if (!res.ok) throw new Error(await res.text())
+      const data = await res.json()
+      setChatMessages(prev => [...prev, { role: 'assistant', content: data.result }])
+    } catch (e) {
+      console.error(e)
+      setChatMessages(prev => [...prev, { role: 'assistant', content: 'Connection issue: ' + e.message }])
+    } finally {
+      setIsTyping(false)
+    }
   }
 
-  const removeNode = (idx) => {
-    setNodes(prev => prev.filter((_, i) => i !== idx))
+  const handleNewNode = () => {
+    const cWidth = 280; const cHeight = 200;
+    const cX = window.innerWidth / 2 - cWidth / 2;
+    const cY = window.innerHeight / 2 - cHeight / 2;
+
+    const offsetX = (Math.random() * 300) - 150;
+    const offsetY = (Math.random() * 300) - 150;
+
+    const newNode = {
+      id: `node-${Date.now()}`,
+      type: 'idea',
+      position: { x: cX + offsetX, y: cY + offsetY },
+      data: {
+        text: '', chip: 'NEW THOUGHT', isEditing: true,
+        onClick: handleNodeClick, onBlur: handleNodeBlur
+      }
+    }
+
+    setNodes(nds => {
+      const updated = [...nds, newNode]
+      localStorage.setItem('thrivee_canvas_nodes', JSON.stringify(updated.filter(n => n.id !== 'central')))
+      return updated
+    })
+    setShowStartBtn(false)
   }
+
+  const onConnect = useCallback((params) => {
+    setEdges(eds => {
+      const edge = { 
+        ...params, 
+        style: { strokeDasharray: '4 4', stroke: '#D4622A', strokeWidth: 1.5, opacity: 0.8 },
+        animated: false
+      }
+      const updated = addEdge(edge, eds)
+      localStorage.setItem('thrivee_canvas_edges', JSON.stringify(updated))
+      return updated
+    })
+  }, [setEdges])
+
+  const handleNodesChangeWrapper = useCallback((changes) => {
+    onNodesChange(changes)
+    // Small timeout to allow nodes state to sync before saving to localStorage
+    setTimeout(() => {
+      setNodes(nds => {
+        localStorage.setItem('thrivee_canvas_nodes', JSON.stringify(nds.filter(k => k.id !== 'central')))
+        return nds
+      })
+    }, 10)
+  }, [onNodesChange, setNodes])
 
   return (
     <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", backgroundColor: '#0F1716', color: '#dce4e2', height: '100vh', width: '100vw', overflow: 'hidden', position: 'relative' }}>
@@ -64,13 +315,6 @@ export default function Whiteboard() {
           background-color: #0F1716;
           background-image: radial-gradient(rgba(255,255,255,0.08) 1px, transparent 0);
           background-size: 24px 24px;
-        }
-        .node-connector {
-          stroke: #D4622A;
-          stroke-dasharray: 4 4;
-          fill: none;
-          stroke-width: 1.5;
-          opacity: 0.3;
         }
         .cursor-blink {
           display: inline-block; width: 2px; height: 1.2em;
@@ -98,140 +342,79 @@ export default function Whiteboard() {
           from { transform: translateX(100%); }
           to { transform: translateX(0); }
         }
-        .node-appear {
-          animation: nodeAppear 0.5s ease forwards;
+        .typing-dot {
+          width: 6px; height: 6px; background-color: #D4622A; border-radius: 50%;
+          animation: typeBounce 1.4s infinite ease-in-out both;
         }
-        @keyframes nodeAppear {
-          from { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
-          to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        @keyframes typeBounce {
+          0%, 80%, 100% { transform: scale(0); }
+          40% { transform: scale(1); }
+        }
+        
+        .custom-handle {
+          width: 8px !important;
+          height: 8px !important;
+          background-color: #D4622A !important;
+          border: none !important;
+          opacity: 0;
+          transition: opacity 0.2s;
+        }
+        .react-flow__node:hover .custom-handle {
+          opacity: 1;
         }
       `}</style>
 
-      {/* Whiteboard grid background */}
-      <div className="whiteboard-grid" style={{ position: 'absolute', inset: 0 }} />
-
       {/* Top Header */}
       <header style={{ position: 'fixed', top: 0, width: '100%', zIndex: 50, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '24px 32px', pointerEvents: 'none' }}>
-        {/* Back to Dashboard */}
         <div style={{ pointerEvents: 'auto' }}>
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="wbtn"
-            style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#dec0b5', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 700, transition: 'color 0.2s' }}
-          >
+          <button onClick={() => navigate('/dashboard')} className="wbtn" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#dec0b5', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 700, transition: 'color 0.2s' }}>
             <span className="material-symbols-outlined" style={{ fontSize: '1.125rem', transition: 'transform 0.2s' }}>arrow_back</span>
             Dashboard
           </button>
         </div>
 
-        {/* Agent Root status */}
-        <div style={{ pointerEvents: 'auto', position: 'relative' }}>
-          <details style={{ position: 'relative' }}>
-            <summary style={{ listStyle: 'none', cursor: 'pointer' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#0F1716', border: '1px solid rgba(38,166,154,0.3)', padding: '6px 16px', borderRadius: '9999px', transition: 'background 0.2s' }}>
-                <span style={{ position: 'relative', display: 'flex', width: '8px', height: '8px' }}>
-                  <span className="agent-dot-ping" style={{ position: 'absolute', inset: 0, background: '#26a69a', borderRadius: '50%', opacity: 0.75, width: '8px', height: '8px' }} />
-                  <span style={{ position: 'relative', background: '#26a69a', borderRadius: '50%', width: '8px', height: '8px' }} />
-                </span>
-                <span style={{ color: '#26a69a', fontWeight: 700, fontSize: '0.75rem', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Agent Root: Active</span>
-              </div>
-            </summary>
-            <div style={{ position: 'absolute', right: 0, marginTop: '12px', width: '288px', background: '#2e3635', border: '1px solid rgba(87,66,58,0.3)', borderRadius: '12px', boxShadow: '0 25px 50px rgba(0,0,0,0.5)', padding: '16px', zIndex: 100 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <h3 style={{ fontSize: '0.625rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.15em', color: '#dec0b5' }}>Agent Root Status</h3>
-                <span className="material-symbols-outlined" style={{ fontSize: '0.875rem', color: '#26a69a' }}>verified</span>
-              </div>
-              <hr style={{ borderColor: 'rgba(87,66,58,0.2)', marginBottom: '12px' }} />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {[
-                  { icon: 'check_circle', text: '12 UTM links generated', sub: '2 min ago', spin: false },
-                  { icon: 'sync', text: 'Monitoring lead data...', sub: 'live', spin: true },
-                ].map(item => (
-                  <div key={item.text} style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: '0.875rem', color: '#26a69a', flexShrink: 0, animation: item.spin ? 'spin 2s linear infinite' : 'none' }}>{item.icon}</span>
-                    <div>
-                      <p style={{ fontSize: '0.75rem', fontWeight: 500 }}>{item.text}</p>
-                      <p style={{ fontSize: '0.625rem', color: item.spin ? '#26a69a' : 'rgba(222,192,181,0.6)', fontWeight: item.spin ? 700 : 400 }}>{item.sub}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </details>
+        <div style={{ pointerEvents: 'auto' }}>
+          <button onClick={() => navigate('/dashboard')} className="wbtn" style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#0F1716', border: '1px solid rgba(38,166,154,0.3)', padding: '6px 16px', borderRadius: '9999px', transition: 'background 0.2s', cursor: 'pointer' }}>
+            <span style={{ position: 'relative', display: 'flex', width: '8px', height: '8px' }}>
+              <span className="agent-dot-ping" style={{ position: 'absolute', inset: 0, background: '#26a69a', borderRadius: '50%', opacity: 0.75, width: '8px', height: '8px' }} />
+              <span style={{ position: 'relative', background: '#26a69a', borderRadius: '50%', width: '8px', height: '8px' }} />
+            </span>
+            <span style={{ color: '#26a69a', fontWeight: 700, fontSize: '0.75rem', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+              {agentCount > 0 ? `Agent Root: ${agentCount} Active` : 'Agent Root: Active'}
+            </span>
+          </button>
         </div>
       </header>
 
       {/* Canvas */}
-      <main ref={canvasRef} style={{ position: 'relative', width: '100%', height: '100vh', overflow: 'hidden' }}>
-        {/* SVG connections */}
-        <svg style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>
-          {connections.map((c, i) => (
-            <path key={i} className="node-connector" d={`M ${c.x1} ${c.y1} L ${c.x2} ${c.y2}`} />
-          ))}
-        </svg>
-
-        {/* Central Node */}
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '24px' }}>
-            <div style={{ background: '#D4622A', padding: '40px', borderRadius: '12px', boxShadow: '0 20px 50px rgba(212,98,42,0.3)', maxWidth: '384px', textAlign: 'center', border: '1px solid rgba(212,98,42,0.2)', cursor: 'pointer', transition: 'transform 0.3s' }}>
-              <h1 style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.02em', color: 'white' }}>
-                Why are Hubli girls not signing up?<span className="cursor-blink">|</span>
-              </h1>
-            </div>
-            <p style={{ color: 'rgba(220,228,226,0.4)', fontSize: '0.625rem', fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase' }}>Start anywhere.</p>
-          </div>
-        </div>
-
-        {/* Suggestion Nodes */}
-        {nodes.map((n, i) => (
-          <div
-            key={i}
-            ref={el => { nodeRefs.current[i] = el }}
-            className="node-appear"
-            style={{
-              position: 'absolute',
-              left: `calc(50% + ${n.x}px)`,
-              top: `calc(50% + ${n.y}px)`,
-              transform: 'translate(-50%, -50%)',
-              pointerEvents: 'auto',
-              zIndex: 20,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '8px',
-              animationDelay: `${i * 100}ms`,
-            }}
-            onContextMenu={e => { e.preventDefault(); removeNode(i) }}
-          >
-            <div className="node-card" style={{ background: '#2e3635', padding: '16px', borderRadius: '8px', border: '1px solid rgba(87,66,58,0.3)', boxShadow: '0 10px 30px rgba(0,0,0,0.4)', minWidth: '180px', textAlign: 'center' }}>
-              <p style={{ fontWeight: 700, fontSize: '0.875rem' }} contentEditable suppressContentEditableWarning>{n.text}</p>
-              <div style={{ marginTop: '8px', background: 'rgba(212,98,42,0.1)', color: '#D4622A', fontSize: '0.625rem', padding: '4px 8px', borderRadius: '9999px', display: 'inline-block', border: '1px solid rgba(212,98,42,0.2)', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-                {n.chip}
-              </div>
-            </div>
-          </div>
-        ))}
+      <main className="whiteboard-grid" style={{ position: 'relative', width: '100%', height: '100vh', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '600px', height: '600px', borderRadius: '50%', border: '1px solid rgba(255,255,255,0.03)', pointerEvents: 'none', zIndex: 0 }} />
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: '900px', height: '900px', borderRadius: '50%', border: '1px solid rgba(255,255,255,0.02)', pointerEvents: 'none', zIndex: 0 }} />
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={handleNodesChangeWrapper}
+          onEdgesChange={onEdgesChange}
+          onConnect={onConnect}
+          nodeTypes={nodeTypes}
+          connectionMode="loose"
+          colorMode="dark"
+          proOptions={{ hideAttribution: true }}
+          minZoom={0.2}
+          maxZoom={4}
+        />
 
         {/* Bottom Left Actions */}
         <div style={{ position: 'absolute', bottom: '48px', left: '48px', zIndex: 50, display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <button className="wbtn" style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#232c2a', color: '#dce4e2', padding: '16px 24px', borderRadius: '9999px', border: '1px solid rgba(87,66,58,0.2)', cursor: 'pointer', fontWeight: 700, boxShadow: '0 10px 30px rgba(0,0,0,0.3)', transition: 'all 0.2s' }}>
+          <button onClick={handleNewNode} className="wbtn" style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#232c2a', color: '#dce4e2', padding: '16px 24px', borderRadius: '9999px', border: '1px solid rgba(87,66,58,0.2)', cursor: 'pointer', fontWeight: 700, boxShadow: '0 10px 30px rgba(0,0,0,0.3)', transition: 'all 0.2s' }}>
             <span className="material-symbols-outlined" style={{ color: '#D4622A', transition: 'transform 0.2s' }}>add_circle</span>
             + New Node
           </button>
-          {showStartBtn && (
-            <button onClick={handleStartingPoint} className="wbtn" style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(25,33,32,0.3)', color: 'rgba(220,228,226,0.6)', padding: '16px 20px', borderRadius: '9999px', border: '1px solid rgba(87,66,58,0.1)', cursor: 'pointer', fontWeight: 700, fontSize: '0.875rem', boxShadow: '0 8px 20px rgba(0,0,0,0.2)', transition: 'all 0.2s' }}>
-              ✦ Give me a starting point
-            </button>
-          )}
         </div>
 
         {/* Bottom Right: Ask Thrivee */}
         <div style={{ position: 'absolute', bottom: '48px', right: '48px', zIndex: 50 }}>
-          <button
-            onClick={() => { setShowAiPanel(v => !v); setTimeout(updateConnections, 350) }}
-            className="wbtn"
-            style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#D4622A', color: 'white', padding: '16px 28px', borderRadius: '9999px', border: '1px solid rgba(212,98,42,0.2)', cursor: 'pointer', fontWeight: 700, boxShadow: '0 20px 40px rgba(0,0,0,0.3)', transition: 'all 0.2s' }}
-          >
+          <button onClick={() => setShowAiPanel(v => !v)} className="wbtn" style={{ display: 'flex', alignItems: 'center', gap: '12px', background: '#D4622A', color: 'white', padding: '16px 28px', borderRadius: '9999px', border: '1px solid rgba(212,98,42,0.2)', cursor: 'pointer', fontWeight: 700, boxShadow: '0 20px 40px rgba(0,0,0,0.3)', transition: 'all 0.2s' }}>
             <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
             Ask Thrivee
           </button>
@@ -246,26 +429,55 @@ export default function Whiteboard() {
               <span className="material-symbols-outlined" style={{ color: '#D4622A', fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
               <h2 style={{ fontWeight: 900, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.15em' }}>Thrivee AI Assistant</h2>
             </div>
-            <button onClick={() => { setShowAiPanel(false); setTimeout(updateConnections, 350) }} style={{ color: 'rgba(220,228,226,0.6)', background: 'none', border: 'none', cursor: 'pointer' }}>
+            <button onClick={() => setShowAiPanel(false)} style={{ color: 'rgba(220,228,226,0.6)', background: 'none', border: 'none', cursor: 'pointer' }}>
               <span className="material-symbols-outlined">close</span>
             </button>
           </div>
-          <div style={{ flexGrow: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '90%' }}>
-              <div style={{ background: '#2e3635', padding: '16px', borderRadius: '16px 16px 16px 0', fontSize: '0.875rem', color: '#dec0b5', border: '1px solid rgba(87,66,58,0.2)' }}>
-                I'm analyzing your nodes. Would you like to explore the Hubli demographics further?
+          <div ref={chatScrollRef} style={{ flexGrow: 1, overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {chatMessages.map((msg, i) => {
+              const isAssistant = msg.role === 'assistant'
+              return (
+                <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '90%', alignSelf: isAssistant ? 'flex-start' : 'flex-end' }}>
+                  <div style={{ 
+                    background: isAssistant ? '#2e3635' : 'rgba(212,98,42,0.1)', 
+                    padding: '16px', 
+                    borderRadius: isAssistant ? '16px 16px 16px 0' : '16px 16px 0 16px', 
+                    fontSize: '0.875rem', 
+                    color: isAssistant ? '#dec0b5' : '#ffffff', 
+                    border: '1px solid', 
+                    borderColor: isAssistant ? 'rgba(87,66,58,0.2)' : 'rgba(212,98,42,0.3)',
+                    lineHeight: 1.5
+                  }}>
+                    {msg.content}
+                  </div>
+                  <span style={{ fontSize: '0.625rem', color: 'rgba(220,228,226,0.4)', fontWeight: 700, textTransform: 'uppercase', marginLeft: isAssistant ? '4px' : 0, marginRight: !isAssistant ? '4px' : 0, alignSelf: isAssistant ? 'flex-start' : 'flex-end' }}>
+                    {isAssistant ? 'Thrivee AI' : 'You'}
+                  </span>
+                </div>
+              )
+            })}
+            {isTyping && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxWidth: '90%', alignSelf: 'flex-start' }}>
+                <div style={{ background: '#2e3635', padding: '16px 20px', borderRadius: '16px 16px 16px 0', border: '1px solid rgba(87,66,58,0.2)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <div className="typing-dot" style={{ animationDelay: '0ms' }}></div>
+                  <div className="typing-dot" style={{ animationDelay: '160ms' }}></div>
+                  <div className="typing-dot" style={{ animationDelay: '320ms' }}></div>
+                </div>
+                <span style={{ fontSize: '0.625rem', color: 'rgba(220,228,226,0.4)', fontWeight: 700, textTransform: 'uppercase', marginLeft: '4px' }}>Thrivee AI</span>
               </div>
-              <span style={{ fontSize: '0.625rem', color: 'rgba(220,228,226,0.4)', fontWeight: 700, textTransform: 'uppercase', marginLeft: '4px' }}>Thrivee AI</span>
-            </div>
+            )}
           </div>
           <div style={{ padding: '24px', paddingTop: '8px' }}>
             <div style={{ position: 'relative' }}>
               <input
                 type="text"
                 placeholder="Type a message..."
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSendMessage()}
                 style={{ width: '100%', background: '#192120', border: '1px solid rgba(87,66,58,0.3)', borderRadius: '9999px', padding: '12px 20px', paddingRight: '48px', fontSize: '0.875rem', color: '#dce4e2', outline: 'none', caretColor: '#D4622A' }}
               />
-              <button style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#D4622A' }}>
+              <button onClick={handleSendMessage} disabled={!chatInput.trim() || isTyping} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: (!chatInput.trim() || isTyping) ? 'default' : 'pointer', color: (!chatInput.trim() || isTyping) ? 'rgba(212,98,42,0.3)' : '#D4622A', transition: 'color 0.2s' }}>
                 <span className="material-symbols-outlined">send</span>
               </button>
             </div>

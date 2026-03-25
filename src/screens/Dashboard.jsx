@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
+import { auth } from '../firebase'
 
 // ─── Fallbacks when navigated to directly ────────────────────────────────────
 const FALLBACK_AUTOMATE = [
@@ -38,6 +39,10 @@ export default function Dashboard() {
     ownTasks      = FALLBACK_OWN,
   } = location.state || {}
 
+  const user = auth.currentUser
+  const rawName = user?.displayName || (user?.email ? user.email.split('@')[0].split('.')[0] : 'Megha')
+  const userName = rawName.charAt(0).toUpperCase() + rawName.slice(1)
+
   const [panelState,      setPanelState]      = useState('default')
   const [statsCollapsed,  setStatsCollapsed]  = useState(false)
   const [activeTab,       setActiveTab]       = useState('insights')
@@ -45,8 +50,46 @@ export default function Dashboard() {
   const [instinct,        setInstinct]        = useState('')
   const [showResponse,    setShowResponse]    = useState(false)
   const [stickyCollapsed, setStickyCollapsed] = useState(false)
-  const [signalInput,     setSignalInput]     = useState('')
-  const [signals,         setSignals]         = useState(['Coastal Ochre palette'])
+  
+  const [signalsData,     setSignalsData]     = useState([])
+  const [signalsLoading,  setSignalsLoading]  = useState(false)
+
+  const [workModalOpen, setWorkModalOpen] = useState(false)
+  const [activeTaskWork, setActiveTaskWork] = useState(null)
+  const [isWorking, setIsWorking] = useState(false)
+
+  const handleViewWork = async (taskName) => {
+    setActiveTaskWork({ task: taskName, output: '' })
+    setWorkModalOpen(true)
+    setIsWorking(true)
+    try {
+      const res = await fetch('/api/agent-work', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskName, userName })
+      })
+      if (!res.ok) throw new Error(await res.text())
+      const data = await res.json()
+      setActiveTaskWork({ task: taskName, output: data.result })
+    } catch (e) {
+      console.error(e)
+      setActiveTaskWork({ task: taskName, output: 'Error generating work: ' + e.message })
+    } finally {
+      setIsWorking(false)
+    }
+  }
+
+  const downloadWork = () => {
+    if (!activeTaskWork?.output) return
+    const blob = new Blob([activeTaskWork.output], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${activeTaskWork.task.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.txt`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
 
   // Expand correct panel on mount (from URL param or state flag)
   useEffect(() => {
@@ -66,6 +109,33 @@ export default function Dashboard() {
   // Reset instinct response when pill changes
   useEffect(() => { setShowResponse(false); setInstinct('') }, [activePillIndex])
 
+  // Fetch signals when task pill changes
+  useEffect(() => {
+    const fetchSignals = async () => {
+      const taskName = ownTasks[activePillIndex]?.task
+      if (!taskName) return
+      
+      setSignalsLoading(true)
+      setSignalsData([])
+      try {
+        const res = await fetch('/api/generate-signals', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ taskName })
+        })
+        if (!res.ok) throw new Error(await res.text())
+        const data = await res.json()
+        setSignalsData(data)
+      } catch (e) {
+        console.error('Error generating signals:', e)
+        setSignalsData([{ id: 'err', signal: 'Failed to load signals.', relevance: e.message }])
+      } finally {
+        setSignalsLoading(false)
+      }
+    }
+    fetchSignals()
+  }, [activePillIndex, ownTasks])
+
   const activePillTask = ownTasks[activePillIndex]?.task ?? ''
   const activeQuestion = getQuestion(activePillTask)
 
@@ -80,13 +150,6 @@ export default function Dashboard() {
   const toggleRight = () => setPanelState(p => p === 'focus-expanded'  ? 'default' : 'focus-expanded')
 
   const handleInstinctSend = () => { if (instinct.trim()) setShowResponse(true) }
-
-  const addSignal = (e) => {
-    if (e.key === 'Enter' && signalInput.trim()) {
-      setSignals(prev => [...prev, signalInput.trim()])
-      setSignalInput('')
-    }
-  }
 
   return (
     <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", backgroundColor: '#0f1716', color: '#dce4e2', minHeight: '100vh', overflowX: 'hidden' }}>
@@ -148,7 +211,16 @@ export default function Dashboard() {
         <span style={{ fontSize: '1.5rem', fontWeight: 900, letterSpacing: '-0.04em', color: '#D4622A' }}>Thrivee</span>
       </nav>
 
-      <main style={{ paddingTop: '112px', paddingLeft: '24px', paddingRight: '24px', paddingBottom: '48px', minHeight: '100vh' }}>
+      <div style={{ position: 'fixed', top: '96px', left: '32px', zIndex: 40 }}>
+        <button 
+          onClick={() => navigate('/tasks')} 
+          style={{ background: 'transparent', border: 'none', color: '#a0aab2', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', padding: 0 }}
+        >
+          ← Back
+        </button>
+      </div>
+
+      <main style={{ paddingTop: '136px', paddingLeft: '24px', paddingRight: '24px', paddingBottom: '48px', minHeight: '100vh' }}>
         <div style={{ maxWidth: '1600px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px' }}>
 
           {/* Stats Bar */}
@@ -224,8 +296,11 @@ export default function Dashboard() {
                             <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '9999px', overflow: 'hidden', marginBottom: '12px' }}>
                               <div className="teal-bg progress-fill" style={{ height: '100%', width: `${prog}%` }} />
                             </div>
-                            <button style={{ fontSize: '0.625rem', fontWeight: 700, color: '#D4622A', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              View work <span className="material-symbols-outlined" style={{ fontSize: '0.75rem' }}>arrow_forward</span>
+                            <button 
+                              onClick={() => handleViewWork(t.task)}
+                              style={{ fontSize: '0.625rem', fontWeight: 700, color: '#D4622A', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              {activeTaskWork?.task === t.task && isWorking ? 'Generating...' : 'View work'} <span className="material-symbols-outlined" style={{ fontSize: '0.75rem' }}>{activeTaskWork?.task === t.task && isWorking ? 'hourglass_empty' : 'arrow_forward'}</span>
                             </button>
                           </div>
                         )
@@ -343,22 +418,21 @@ export default function Dashboard() {
                     {activeTab === 'signals' && (
                       <div style={{ display: 'flex', flexDirection: 'column', maxWidth: '576px', margin: '0 auto', width: '100%' }}>
                         <h5 style={{ fontSize: '0.625rem', textTransform: 'uppercase', fontWeight: 900, letterSpacing: '0.2em', color: 'rgba(255,255,255,0.3)', marginBottom: '32px' }}>Active Market Signals</h5>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px' }}>
-                          {signals.map((sig, i) => (
-                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '20px', borderRadius: '12px', border: '1px solid rgba(87,66,58,0.1)', background: 'rgba(255,255,255,0.05)' }}>
-                              <span className="material-symbols-outlined" style={{ color: 'rgba(255,255,255,0.1)', fontSize: '1.25rem' }}>check_circle</span>
-                              <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>{sig}</span>
-                            </div>
-                          ))}
-                        </div>
-                        <input
-                          type="text"
-                          placeholder="+ Add your own signal"
-                          value={signalInput}
-                          onChange={e => setSignalInput(e.target.value)}
-                          onKeyDown={addSignal}
-                          style={{ width: '100%', background: 'transparent', borderBottom: '1px solid rgba(255,255,255,0.1)', padding: '12px 0', fontSize: '0.875rem', color: '#dce4e2', outline: 'none', caretColor: '#D4622A' }}
-                        />
+                        
+                        {signalsLoading ? (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '16px', color: '#a0aab2', padding: '40px 0' }}>
+                            <div style={{ width: '16px', height: '16px', border: '2px solid rgba(212,98,42,0.3)', borderTopColor: '#D4622A', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> Fetching real-time signals...
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '32px' }}>
+                            {signalsData.map((sig, i) => (
+                              <div key={sig.id || i} style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '20px', borderRadius: '12px', border: '1px solid rgba(87,66,58,0.1)', background: 'rgba(255,255,255,0.05)' }}>
+                                <span style={{ fontSize: '0.9375rem', fontWeight: 700, color: '#dce4e2' }}>{sig.signal}</span>
+                                <span style={{ fontSize: '0.8125rem', color: '#a0aab2', lineHeight: 1.5 }}>{sig.relevance}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -416,6 +490,41 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Agent Work Modal */}
+      {workModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', padding: '24px' }}>
+          <div style={{ background: '#192120', border: '1px solid #D4622A', borderRadius: '16px', width: '100%', maxWidth: '800px', maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.5)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid rgba(212,98,42,0.2)', background: 'rgba(212,98,42,0.05)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span className="material-symbols-outlined" style={{ color: '#D4622A' }}>terminal</span>
+                <span style={{ fontWeight: 700, color: '#ffb596', fontSize: '1.125rem' }}>{activeTaskWork?.task}</span>
+              </div>
+              <button onClick={() => setWorkModalOpen(false)} className="material-symbols-outlined" style={{ background: 'transparent', border: 'none', color: '#dec0b5', cursor: 'pointer' }}>close</button>
+            </div>
+            
+            <div style={{ padding: '32px', overflowY: 'auto', flexGrow: 1, whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.875rem', lineHeight: 1.6, color: '#dce4e2' }}>
+              {isWorking ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', color: '#a0aab2' }}>
+                  <div style={{ width: '16px', height: '16px', border: '2px solid rgba(212,98,42,0.3)', borderTopColor: '#D4622A', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> Generating raw output...
+                </div>
+              ) : (
+                activeTaskWork?.output
+              )}
+            </div>
+
+            <div style={{ padding: '20px 24px', borderTop: '1px solid rgba(87,66,58,0.1)', display: 'flex', justifyContent: 'flex-end', background: 'rgba(0,0,0,0.2)' }}>
+              <button 
+                onClick={downloadWork}
+                disabled={isWorking || !activeTaskWork?.output}
+                style={{ background: '#D4622A', border: 'none', color: 'white', fontWeight: 700, padding: '12px 24px', borderRadius: '8px', cursor: (isWorking || !activeTaskWork?.output) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '8px', opacity: (isWorking || !activeTaskWork?.output) ? 0.5 : 1, transition: 'all 0.2s' }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '1.25rem' }}>download</span> Download
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
