@@ -17,8 +17,8 @@ const CentralNode = ({ data }) => {
             <div style={{ width: '20px', height: '20px', border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> Generating Mind Map...
           </div>
         ) : (
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.02em', color: 'white', wordWrap: 'break-word', overflowWrap: 'break-word' }}>
-            {data.text}<span className="cursor-blink">|</span>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, letterSpacing: '-0.02em', color: 'white', wordWrap: 'break-word', overflowWrap: 'break-word', userSelect: 'none' }}>
+            {data.text}
           </h1>
         )}
         {!data.isGenerating && <p style={{ color: 'rgba(220,228,226,0.4)', fontSize: '0.625rem', fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', marginTop: '24px' }}>Start anywhere.</p>}
@@ -99,6 +99,7 @@ export default function Whiteboard() {
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
 
   const handleNodeClick = useCallback((id) => {
+    if (id === 'central') return
     setNodes(nds => {
       const updated = nds.map(n => n.id === id ? { ...n, data: { ...n.data, isEditing: true } } : n)
       localStorage.setItem('thrivee_canvas_nodes', JSON.stringify(updated.filter(k => k.id !== 'central')))
@@ -130,15 +131,18 @@ export default function Whiteboard() {
         
         const ideas = ideaItems.map((item, i) => {
           const fallbackPos = FIX_POSITIONS[i % 4]
+          // Normalize: item.data exists if loading from storage, else use item directly (from API)
+          const nodeText = item.data?.text !== undefined ? item.data.text : (item.text || '')
+          const nodeChip = item.data?.chip !== undefined ? item.data.chip : (item.chip || '')
+          const nodeX = item.position?.x !== undefined ? item.position.x : (item.x !== undefined ? item.x : cX + fallbackPos.x)
+          const nodeY = item.position?.y !== undefined ? item.position.y : (item.y !== undefined ? item.y : cY + fallbackPos.y)
+
           return {
             id: item.id || `node-${Date.now()}-${i}`,
             type: 'idea',
-            position: { 
-              x: item.x !== undefined ? item.x : cX + fallbackPos.x, 
-              y: item.y !== undefined ? item.y : cY + fallbackPos.y 
-            },
+            position: { x: nodeX, y: nodeY },
             data: {
-              text: item.text, chip: item.chip, isEditing: item.isEditing || false,
+              text: nodeText, chip: nodeChip, isEditing: item.data?.isEditing || item.isEditing || false,
               onClick: handleNodeClick, onBlur: handleNodeBlur
             }
           }
@@ -151,6 +155,7 @@ export default function Whiteboard() {
         const storedCanvas = localStorage.getItem('thrivee_canvas')
         const storedNodes = localStorage.getItem('thrivee_canvas_nodes')
         if (storedCanvas && storedNodes) {
+          console.log('[Whiteboard] Loading existing session from storage...')
           const parsedCanvas = JSON.parse(storedCanvas)
           const parsedIdeas = JSON.parse(storedNodes).filter(n => n.id !== 'central')
           
@@ -179,10 +184,15 @@ export default function Whiteboard() {
         
         const tasksList = JSON.parse(storedTasks)
         const firstProtect = tasksList.find(t => t.category === 'protect' || t.category === 'own')
-        if (!firstProtect) throw new Error('No protect task found')
+        if (!firstProtect) {
+          console.warn('[Whiteboard] No protect task found in list')
+          throw new Error('No protect task found')
+        }
 
+        console.log('[Whiteboard] Found protect task for canvas:', firstProtect.text || firstProtect.task)
         setNodes([{ id: 'central', type: 'central', position: { x: cX, y: cY }, data: { text: "Generating Mind Map...", isGenerating: true } }])
         
+        console.log('[Whiteboard] Calling /api/generate-canvas with:', firstProtect.text || firstProtect.task)
         const res = await fetch('/api/generate-canvas', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -191,8 +201,15 @@ export default function Whiteboard() {
 
         if (!res.ok) throw new Error(await res.text())
         const data = await res.json()
+        console.log('[Whiteboard] API Response parsed:', data)
 
-        const finalNodes = buildNodes(data.central, data.nodes.map(n => ({ text: n.question, chip: n.tag })), false)
+        // Map AI nodes to our React Flow structure
+        const aiNodes = data.nodes.map(n => ({
+          text: n.question,
+          chip: n.tag
+        }))
+
+        const finalNodes = buildNodes(data.central, aiNodes, false)
         const newEdges = finalNodes.filter(n => n.id !== 'central').map(idNode => ({
           id: `e-central-${idNode.id}`,
           source: 'central',

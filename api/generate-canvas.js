@@ -2,6 +2,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   const { taskText } = req.body
+  console.log('Calling generate-canvas with:', taskText)
   if (!taskText) return res.status(400).json({ error: 'Task text required' })
 
   const systemPrompt = `You are a strategic thinking engine.
@@ -29,7 +30,7 @@ Return ONLY valid JSON, no preamble:
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': process.env.VITE_CLAUDE_API_KEY || process.env.CLAUDE_API_KEY,
+        'x-api-key': process.env.ANTHROPIC_API_KEY || process.env.VITE_CLAUDE_API_KEY || process.env.CLAUDE_API_KEY,
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
