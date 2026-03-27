@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { auth } from '../firebase'
 
@@ -36,17 +36,17 @@ export default function Tasks() {
     return FALLBACK_TASKS
   }
 
-  const TASKS = getInitialTasks().map((t, i) => ({
+  const TASKS = useMemo(() => getInitialTasks().map((t, i) => ({
     id:            t.id ?? i + 1,
     text:          t.text ?? t.task,
     category:      t.category ?? t.type ?? 'protect',
     reason:        t.reason || 'Strategic priority.',
     time_estimate: t.time_estimate || '1 hr',
     urgency:       (t.urgency || 'medium').toLowerCase(),
-  }))
+  })), [location.state?.tasks])
 
-  const handToAI = TASKS.filter(t => t.category === 'hand-to-ai' || t.category === 'automate')
-  const protect  = TASKS.filter(t => t.category === 'protect' || t.category === 'own')
+  const handToAI = useMemo(() => TASKS.filter(t => t.category === 'hand-to-ai' || t.category === 'automate'), [TASKS])
+  const protect  = useMemo(() => TASKS.filter(t => t.category === 'protect' || t.category === 'own'), [TASKS])
 
   // phase: 'idle' | 'flying' | 'sorted'
   const [phase, setPhase] = useState('idle')
