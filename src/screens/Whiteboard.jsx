@@ -75,6 +75,7 @@ export default function Whiteboard() {
   const navigate = useNavigate()
   const [showAiPanel, setShowAiPanel] = useState(false)
   const [showStartBtn, setShowStartBtn] = useState(true)
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false)
   
   const [chatMessages, setChatMessages] = useState([
     { role: 'assistant', content: "I'm analyzing your nodes. What's standing out to you?" }
@@ -114,6 +115,94 @@ export default function Whiteboard() {
       return updated
     })
   }, [setNodes])
+
+  const getExportContent = (format) => {
+    const date = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    const centralNode = nodes.find(n => n.id === 'central')?.data?.text || 'Finalise the press release for Ugadi campaign'
+
+    if (format === 'md') {
+      return `## STRATEGY BRIEF
+**Task:** ${centralNode}
+**Prepared by:** Megha S — Senior Growth Manager, EduSpark
+**Date:** ${date}
+
+## CORE QUESTION
+**What angle gets maximum news pickups?**
+
+### OPTION 1 — Market data angle
+- 14 hrs/week lost to grunt work
+- WEF: 92M jobs shifting by 2030
+- Strongest for journalists
+
+### OPTION 2 — Founder story angle
+- Had to let someone go on a Friday
+- She couldn't keep up — not skill, system
+- Human, emotional, shareable
+
+### OPTION 3 — Product launch angle
+- Thrive's AI playbook feature
+- Risk: too internal, low news value
+
+### OPTION 4 — Regional Ugadi hook
+- Vernacular-first content — 3-4x engagement
+- Tanishq and Paper Boat doing this now
+- Timely, culturally relevant
+
+## RECOMMENDATION
+[Leave blank for Megha to fill in]
+
+## NEXT STEPS
+[Leave blank for Megha to fill in]`
+    }
+
+    return `STRATEGY BRIEF
+Task: ${centralNode}
+Prepared by: Megha S — Senior Growth Manager, EduSpark
+Date: ${date}
+
+CORE QUESTION
+What angle gets maximum news pickups?
+
+OPTION 1 — Market data angle
+- 14 hrs/week lost to grunt work
+- WEF: 92M jobs shifting by 2030
+- Strongest for journalists
+
+OPTION 2 — Founder story angle
+- Had to let someone go on a Friday
+- She couldn't keep up — not skill, system
+- Human, emotional, shareable
+
+OPTION 3 — Product launch angle
+- Thrive's AI playbook feature
+- Risk: too internal, low news value
+
+OPTION 4 — Regional Ugadi hook
+- Vernacular-first content — 3-4x engagement
+- Tanishq and Paper Boat doing this now
+- Timely, culturally relevant
+
+RECOMMENDATION
+[Leave blank for Megha to fill in]
+
+NEXT STEPS
+[Leave blank for Megha to fill in]`
+  }
+
+  const downloadFile = (format) => {
+    const content = getExportContent(format)
+    const dateStr = new Date().toISOString().split('T')[0]
+    const filename = `Press_Release_Strategy_Megha_${dateStr}.${format}`
+    const blob = new Blob([content], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
 
   useEffect(() => {
     const initializeCanvas = async () => {
@@ -379,6 +468,10 @@ export default function Whiteboard() {
         .react-flow__node:hover .custom-handle {
           opacity: 1;
         }
+        @keyframes modalSlideUp {
+          from { opacity: 0; transform: translateY(20px) scale(0.95); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
       `}</style>
 
       {/* Top Header */}
@@ -390,7 +483,27 @@ export default function Whiteboard() {
           </button>
         </div>
 
-        <div style={{ pointerEvents: 'auto' }}>
+        <div style={{ pointerEvents: 'auto', display: 'flex', gap: '16px', alignItems: 'center' }}>
+          <button 
+            onClick={() => setIsExportModalOpen(true)}
+            className="wbtn" 
+            style={{ 
+              background: '#D4622A', 
+              color: 'white', 
+              padding: '6px 20px', 
+              borderRadius: '9999px', 
+              fontWeight: 700, 
+              fontSize: '0.75rem', 
+              border: 'none', 
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(212,98,42,0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            Export Strategy →
+          </button>
           <button onClick={() => navigate('/dashboard')} className="wbtn" style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#0F1716', border: '1px solid rgba(38,166,154,0.3)', padding: '6px 16px', borderRadius: '9999px', transition: 'background 0.2s', cursor: 'pointer' }}>
             <span style={{ position: 'relative', display: 'flex', width: '8px', height: '8px' }}>
               <span className="agent-dot-ping" style={{ position: 'absolute', inset: 0, background: '#26a69a', borderRadius: '50%', opacity: 0.75, width: '8px', height: '8px' }} />
@@ -437,6 +550,50 @@ export default function Whiteboard() {
           </button>
         </div>
       </main>
+
+      {/* Export Modal */}
+      {isExportModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(8px)' }}>
+          <div className="pulse-soft" style={{ background: '#192120', border: '1px solid #D4622A', borderRadius: '24px', width: '90%', maxWidth: '640px', padding: '40px', position: 'relative', boxShadow: '0 30px 60px rgba(212,98,42,0.15)', animation: 'modalSlideUp 0.4s cubic-bezier(0.19, 1, 0.22, 1)' }}>
+            <button 
+              onClick={() => setIsExportModalOpen(false)} 
+              style={{ position: 'absolute', top: '24px', right: '24px', background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.875rem', fontWeight: 700 }}
+            >
+              ✕ close
+            </button>
+            
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '8px', color: 'white' }}>Export your strategy</h2>
+            <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: '0.875rem', marginBottom: '32px' }}>
+              Your thinking canvas for: <span style={{ color: '#D4622A', fontWeight: 700 }}>{nodes.find(n => n.id === 'central')?.data?.text || 'Finalise the press release'}</span>
+            </p>
+            
+            <div style={{ background: '#0F1716', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '12px', padding: '24px', maxHeight: '360px', overflowY: 'auto', marginBottom: '32px', textAlign: 'left', whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.8125rem', lineHeight: '1.6', color: 'rgba(255,255,255,0.8)', scrollbarWidth: 'thin' }}>
+              {getExportContent('txt')}
+            </div>
+            
+            <div style={{ display: 'flex', gap: '16px' }}>
+              <button 
+                onClick={() => downloadFile('txt')} 
+                style={{ flex: 1, background: '#D4622A', color: 'white', border: 'none', padding: '16px', borderRadius: '9999px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'transform 0.2s', boxShadow: '0 8px 20px rgba(212,98,42,0.2)' }}
+                onMouseDown={e => e.currentTarget.style.transform = 'scale(0.98)'}
+                onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '1.25rem' }}>description</span>
+                Download .txt
+              </button>
+              <button 
+                onClick={() => downloadFile('md')} 
+                style={{ flex: 1, background: '#D4622A', color: 'white', border: 'none', padding: '16px', borderRadius: '9999px', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: 'transform 0.2s', boxShadow: '0 8px 20px rgba(212,98,42,0.2)' }}
+                onMouseDown={e => e.currentTarget.style.transform = 'scale(0.98)'}
+                onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '1.25rem' }}>markdown</span>
+                Download .md
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* AI Assistant Side Panel */}
       {showAiPanel && (

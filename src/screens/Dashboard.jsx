@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { auth } from '../firebase'
 
 // ─── Fallbacks when navigated to directly ────────────────────────────────────
 const FALLBACK_AUTOMATE = [
   { id: 1, task: 'Generate UTM links for the influencer post', category: 'automate' },
-  { id: 2, task: 'Last quarter competitor launch analysis',     category: 'automate' },
-  { id: 3, task: 'Draft three Ugadi social captions',           category: 'automate' },
+  { id: 2, task: "Pull last quarter's competitor analysis",    category: 'automate' },
+  { id: 3, task: 'Draft Ugadi social captions',                category: 'automate' },
   { id: 4, task: 'Resize 40 festive Ugadi banners',             category: 'automate' },
   { id: 5, task: 'Format media spend CSV for agency',           category: 'automate' },
   { id: 6, task: 'Pull Mangaluru lead drop data',               category: 'automate' },
@@ -58,6 +58,45 @@ export default function Dashboard() {
   const [workModalOpen, setWorkModalOpen] = useState(false)
   const [activeTaskWork, setActiveTaskWork] = useState(null)
   const [isWorking, setIsWorking] = useState(false)
+
+  const [taskProgressMap, setTaskProgressMap] = useState({})
+  const [showToast, setShowToast] = useState(false)
+
+  // Trigger animations on mount
+  useEffect(() => {
+    const tasksToAnimate = [
+      { id: 1, duration: 8000 },
+      { id: 2, duration: 14000 },
+      { id: 3, duration: 20000 },
+    ]
+    
+    tasksToAnimate.forEach(({ id, duration }) => {
+      let currentProgress = 0
+      const totalSteps = duration / 100 // update every 100ms
+      const stepSize = 100 / totalSteps
+      
+      const timer = setInterval(() => {
+        currentProgress += stepSize
+        if (currentProgress >= 100) {
+          currentProgress = 100
+          clearInterval(timer)
+        }
+        setTaskProgressMap(prev => ({ ...prev, [id]: Math.floor(currentProgress) }))
+      }, 100)
+    })
+  }, [])
+
+  const toastFiredRef = useRef(false)
+  useEffect(() => {
+    if (taskProgressMap[1] === 100 && taskProgressMap[2] === 100 && taskProgressMap[3] === 100) {
+      if (!toastFiredRef.current) {
+        toastFiredRef.current = true
+        console.log('AGENT ROOT: All tasks complete. Firing toast.')
+        setShowToast(true)
+        setTimeout(() => setShowToast(false), 10000)
+      }
+    }
+  }, [taskProgressMap])
 
   const handleViewWork = async (taskName) => {
     setActiveTaskWork({ task: taskName, output: '' })
@@ -410,21 +449,42 @@ export default function Dashboard() {
                     <div>
                       <h4 style={{ fontSize: '0.625rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'rgba(255,255,255,0.4)', marginBottom: '12px' }}>Working on</h4>
                       {automateTasks.map((t, i) => {
-                        const prog = taskProgress(t.id ?? i)
+                        const id = t.id ?? (i + 1)
+                        const prog = taskProgressMap[id] ?? taskProgress(id)
+                        const isDone = prog === 100
+                        const isSpecial = id <= 3
+
                         return (
-                          <div key={t.id ?? i} className="agent-task-card">
+                          <div key={id} className="agent-task-card">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                               <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>⚙️ {t.task}</span>
-                              <span className="teal-text" style={{ fontSize: '0.625rem', fontWeight: 700, flexShrink: 0, marginLeft: '8px' }}>{prog}%</span>
+                              <span className={isDone ? 'teal-text' : ''} style={{ fontSize: '0.625rem', fontWeight: 700, flexShrink: 0, marginLeft: '8px', color: isDone ? '#2dd4bf' : 'inherit' }}>
+                                {isDone ? '✓ Complete' : `${prog}%`}
+                              </span>
                             </div>
                             <div style={{ width: '100%', height: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '9999px', overflow: 'hidden', marginBottom: '12px' }}>
-                              <div className="teal-bg progress-fill" style={{ height: '100%', width: `${prog}%` }} />
+                              <div 
+                                className="progress-fill" 
+                                style={{ height: '100%', width: `${prog}%`, background: isDone ? '#2dd4bf' : '#D4622A', transition: isSpecial ? 'width 0.1s linear' : 'width 0.6s ease' }} 
+                              />
                             </div>
                             <button 
+                              disabled={!isDone}
                               onClick={() => handleViewWork(t.task)}
-                              style={{ fontSize: '0.625rem', fontWeight: 700, color: '#D4622A', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                              style={{ 
+                                fontSize: '0.625rem', 
+                                fontWeight: 800, 
+                                color: !isDone ? 'rgba(255,255,255,0.2)' : '#D4622A', 
+                                background: 'none', 
+                                border: 'none', 
+                                cursor: !isDone ? 'not-allowed' : 'pointer', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '4px',
+                                textTransform: 'uppercase'
+                              }}
                             >
-                              {activeTaskWork?.task === t.task && isWorking ? 'Generating...' : 'View work'} <span className="material-symbols-outlined" style={{ fontSize: '0.75rem' }}>{activeTaskWork?.task === t.task && isWorking ? 'hourglass_empty' : 'arrow_forward'}</span>
+                              {activeTaskWork?.task === t.task && isWorking ? 'Generating...' : 'View work →'}
                             </button>
                           </div>
                         )
@@ -595,6 +655,20 @@ export default function Dashboard() {
           </div>
         </div>
       </main>
+
+      {/* Toast Notification */}
+      <div style={{ 
+        position: 'fixed', top: '32px', right: '32px', zIndex: 1000,
+        background: '#2dd4bf', color: 'white', padding: '16px 24px', borderRadius: '12px',
+        fontWeight: 700, display: 'flex', alignItems: 'center', gap: '12px',
+        boxShadow: '0 12px 32px rgba(45,212,191,0.3)',
+        transform: showToast ? 'translateX(0)' : 'translateX(calc(100% + 40px))',
+        opacity: showToast ? 1 : 0,
+        transition: 'all 0.4s cubic-bezier(0.19, 1, 0.22, 1)'
+      }}>
+        <span className="material-symbols-outlined">verified_user</span>
+        ✓ All 3 tasks complete. 3.5 hours recovered.
+      </div>
 
       {/* Sticky Note */}
       <div className={`sticky-note ${stickyCollapsed ? 'collapsed' : ''}`}>

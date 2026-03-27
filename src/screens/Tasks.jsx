@@ -4,12 +4,13 @@ import { auth } from '../firebase'
 
 // ─── Fallback used when navigated to directly (no API tasks in state) ─────────
 const FALLBACK_TASKS = [
-  { id: 1,  text: 'Resize 40 festive Ugadi banners',           category: 'hand-to-ai', reason: 'Highly repeatable format updates.', time_estimate: '30 mins', urgency: 'low' },
-  { id: 2,  text: 'Pivot visual language to Coastal identity', category: 'protect', reason: 'Core brand and judgment required.', time_estimate: '2 hrs', urgency: 'high' },
-  { id: 3,  text: 'Generate UTM links for 12 influencers',     category: 'hand-to-ai', reason: 'Mechanical data entry mapping.', time_estimate: '15 mins', urgency: 'medium' },
-  { id: 4,  text: 'Analyse why Hubli leads dropped 18%',       category: 'protect', reason: 'Context-heavy strategic analysis.', time_estimate: '1.5 hrs', urgency: 'high' },
-  { id: 5,  text: 'Format media spend CSV for agency',         category: 'hand-to-ai', reason: 'Basic predictable spreadsheet cleanup.', time_estimate: '45 mins', urgency: 'low' },
-  { id: 6,  text: 'Build CFO briefing on Mangaluru campaign',  category: 'protect', reason: 'Internal stakeholder relationship management.', time_estimate: '1 hr', urgency: 'high' },
+  { id: 1,  text: 'Generate UTM links for the influencer post', category: 'hand-to-ai', reason: 'Mechanical data entry mapping.', time_estimate: '15 mins', urgency: 'medium' },
+  { id: 2,  text: "Pull last quarter's competitor analysis",    category: 'hand-to-ai', reason: 'Context-heavy strategic analysis.', time_estimate: '2 hrs', urgency: 'high' },
+  { id: 3,  text: 'Draft Ugadi social captions',                category: 'hand-to-ai', reason: 'Highly repeatable creative output.', time_estimate: '30 mins', urgency: 'low' },
+  { id: 4,  text: 'Resize 40 festive Ugadi banners',             category: 'hand-to-ai', reason: 'Highly repeatable format updates.', time_estimate: '30 mins', urgency: 'low' },
+  { id: 5,  text: 'Pivot visual language to Coastal identity',   category: 'protect', reason: 'Core brand and judgment required.', time_estimate: '2 hrs', urgency: 'high' },
+  { id: 6,  text: 'Analyse why Hubli leads dropped 18%',         category: 'protect', reason: 'Context-heavy strategic analysis.', time_estimate: '1.5 hrs', urgency: 'high' },
+  { id: 7,  text: 'Build CFO briefing on Mangaluru campaign',    category: 'protect', reason: 'Internal stakeholder relationship management.', time_estimate: '1 hr', urgency: 'high' },
 ]
 
 // Animation phases:  idle → flying → sorted
@@ -65,6 +66,64 @@ export default function Tasks() {
 
   const voiceText = `Hey ${userName}. I've sorted your day. You have ${handToAI.length} tasks to hand to AI — ${handToAI.slice(0,3).map(t => t.text.split(' ').slice(0,2).join(' ')).join(', ')}. You have ${protect.length} tasks only you can do. Your highest priority protected task is: ${protect[0]?.text || 'your deep work'}. Delegate or Think — your call.`
 
+  const speakText = (text) => {
+    window.speechSynthesis.cancel()
+    setIsSpeaking(true)
+    const words = text.split(' ')
+    setVoiceWords(words)
+    setCurrentWordIndex(-1)
+    
+    function trySpeak() {
+      const synth = window.speechSynthesis
+      const voices = synth.getVoices()
+      const utterance = new SpeechSynthesisUtterance(text)
+      
+      const preferred = voices.find(v => 
+        v.name.includes('Neerja') || 
+        v.name.includes('Veena') ||
+        v.name.includes('Raveena') ||
+        v.lang === 'en-IN'
+      ) || voices.find(v => 
+        v.name.toLowerCase().includes('female')
+      ) || voices.find(v => 
+        v.lang.startsWith('en')
+      )
+      
+      if (preferred) utterance.voice = preferred
+      utterance.rate = 0.92
+      utterance.pitch = 1.0
+      utterance.volume = 1.0
+      
+      utterance.onboundary = (event) => {
+        if (event.name === 'word') {
+          const textUpToBoundary = text.slice(0, event.charIndex + event.charLength).trim()
+          const wordCount = textUpToBoundary.split(/\s+/).length - 1
+          setCurrentWordIndex(wordCount)
+        }
+      }
+
+      utterance.onend = () => {
+        setIsSpeaking(false)
+        setCurrentWordIndex(words.length)
+      }
+
+      utterance.onerror = () => {
+        setIsSpeaking(false)
+      }
+      
+      synth.speak(utterance)
+    }
+    
+    const voices = window.speechSynthesis.getVoices()
+    if (voices.length > 0) {
+      trySpeak()
+    } else {
+      window.speechSynthesis.onvoiceschanged = () => {
+        trySpeak()
+      }
+    }
+  }
+
   const handleSort = () => {
     if (phase !== 'idle') return
 
@@ -79,74 +138,23 @@ export default function Tasks() {
     setTimeout(() => {
       setPhase('sorted')
       setShowVoiceChat(true)
-      setIsSpeaking(true) // Start visual animation immediately
+      // Call visual animation immediately
     }, 480)
+
+    // USER Voice Speech Requirement: Trigger on click
+    speakText(voiceText)
   }
 
   const [sortedVisible, setSortedVisible] = useState(false)
   const sessionSavedRef = useRef(false)
 
   useEffect(() => {
+    return () => { window.speechSynthesis.cancel() }
+  }, [])
+
+  useEffect(() => {
     if (phase === 'sorted') {
       requestAnimationFrame(() => setSortedVisible(true))
-
-      // Trigger Voice
-      const words = voiceText.split(' ')
-      setVoiceWords(words)
-      setIsSpeaking(true)
-
-      const synth = window.speechSynthesis
-      const utter = new SpeechSynthesisUtterance(voiceText)
-      
-      // Voice Preferences
-      const voices = synth.getVoices()
-      const preferredVoice = voices.find(v => (v.lang.includes('IN') || v.lang.includes('US')) && (v.name.includes('Female') || ['Neerja', 'Veena', 'Raveena', 'Zira', 'Samantha'].some(n => v.name.includes(n))))
-      if (preferredVoice) utter.voice = preferredVoice
-      utter.rate = 0.95
-      utter.pitch = 1.0
-      utter.volume = 0.9
-
-      utter.onboundary = (event) => {
-        if (event.name === 'word') {
-          const textUpToBoundary = voiceText.slice(0, event.charIndex + event.charLength).trim()
-          const wordCount = textUpToBoundary.split(/\s+/).length - 1
-          setCurrentWordIndex(wordCount)
-        }
-      }
-
-      utter.onend = () => {
-        setIsSpeaking(false)
-        setCurrentWordIndex(words.length)
-      }
-
-      utter.onerror = () => {
-        setHasVoiceError(true)
-        runFallbackTimer(words)
-      }
-
-      // If voices aren't loaded yet
-      if (voices.length === 0) {
-        synth.onvoiceschanged = () => {
-          const updatedVoices = synth.getVoices()
-          const pVoice = updatedVoices.find(v => (v.lang.includes('IN') || v.lang.includes('US')) && (v.name.includes('Female') || ['Neerja', 'Veena', 'Raveena', 'Zira', 'Samantha'].some(n => v.name.includes(n))))
-          if (pVoice) utter.voice = pVoice
-          synth.speak(utter)
-        }
-      } else {
-        synth.speak(utter)
-      }
-
-      const runFallbackTimer = (wordsArr) => {
-        let idx = 0
-        const interval = setInterval(() => {
-          setCurrentWordIndex(idx)
-          idx++
-          if (idx >= wordsArr.length) {
-            clearInterval(interval)
-            setIsSpeaking(false)
-          }
-        }, 230)
-      }
 
       if (!sessionSavedRef.current) {
         sessionSavedRef.current = true
@@ -169,7 +177,6 @@ export default function Tasks() {
           localStorage.setItem('thrivee_sessions', JSON.stringify(existing))
         } catch (e) {}
       }
-      return () => { synth.cancel() }
     } else {
       setSortedVisible(false)
     }
@@ -245,7 +252,7 @@ export default function Tasks() {
 
       {/* Back Nav */}
       <nav style={{ position: 'fixed', top: '32px', left: '32px', zIndex: 50 }}>
-        <button onClick={() => navigate('/home')} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#dec0b5', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500 }}>
+        <button onClick={() => phase === 'sorted' ? setPhase('idle') : navigate('/home')} style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#dec0b5', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 500 }}>
           <span className="material-symbols-outlined" style={{ fontSize: '1rem' }}>arrow_back</span> Back
         </button>
       </nav>
@@ -300,12 +307,14 @@ export default function Tasks() {
         <div style={{ position: 'fixed', bottom: 0, left: 0, width: '100%', padding: '24px', background: 'rgba(15,23,22,0.85)', backdropFilter: 'blur(24px)', zIndex: 40, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
           <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
             
-            {showVoiceChat && !isDelegated && (
+            {showVoiceChat && (
               <div style={{ background: '#192120', border: '1px solid #D4622A', borderRadius: '12px', padding: '16px', marginBottom: '24px', position: 'relative' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div className="dot-pulse" />
-                    <span style={{ color: '#D4622A', fontSize: '0.65rem', fontWeight: 900, letterSpacing: '0.1em' }}>THRIVE IS SPEAKING</span>
+                    <div className="dot-pulse" style={{ background: isDelegated ? '#2dd4bf' : '#D4622A' }} />
+                    <span style={{ color: isDelegated ? '#2dd4bf' : '#D4622A', fontSize: '0.65rem', fontWeight: 900, letterSpacing: '0.1em' }}>
+                      {isDelegated ? 'AGENT ROOT STARTING' : 'THRIVE IS SPEAKING'}
+                    </span>
                   </div>
                   <button onClick={() => setShowVoiceChat(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', fontSize: '0.75rem', cursor: 'pointer' }}>✕ dismiss</button>
                 </div>
@@ -314,39 +323,46 @@ export default function Tasks() {
                   {[...Array(18)].map((_, i) => (
                     <div key={i} className="waveform-bar" style={{ 
                       height: '4px',
-                      animation: isSpeaking ? `wave ${0.4 + Math.random() * 0.5}s ease-in-out infinite` : 'none',
+                      background: isDelegated ? '#2dd4bf' : '#D4622A',
+                      animation: (isSpeaking || isDelegated) ? `wave ${0.4 + Math.random() * 0.5}s ease-in-out infinite` : 'none',
                       animationDelay: `${Math.random() * 0.5}s`
                     }} />
                   ))}
                 </div>
 
-                <div style={{ textAlign: 'center', fontSize: '0.9rem', lineHeight: 1.6, minHeight: '3em' }}>
-                  {voiceWords.map((word, i) => {
-                    let color = 'rgba(255,255,255,0.05)'
-                    let fontWeight = 400
-                    if (i < currentWordIndex) color = 'rgba(45, 212, 191, 0.4)'
-                    if (i === currentWordIndex) { color = 'white'; fontWeight = 700 }
-                    return <span key={i} style={{ color, fontWeight, transition: 'color 0.2s', margin: '0 2px' }}>{word} </span>
-                  })}
+                <div style={{ textAlign: 'center', fontSize: '1rem', lineHeight: 1.6, minHeight: '3em', color: isDelegated ? '#2dd4bf' : 'inherit' }}>
+                  {isDelegated ? (
+                    <div style={{ fontWeight: 700 }}>✓ Agent Root starting... Working on your {handToAI.length} AI tasks</div>
+                  ) : (
+                    voiceWords.map((word, i) => {
+                      let color = 'rgba(255,255,255,0.05)'
+                      let fontWeight = 400
+                      if (i < currentWordIndex) color = 'rgba(45, 212, 191, 0.4)'
+                      if (i === currentWordIndex) { color = 'white'; fontWeight = 700 }
+                      return <span key={i} style={{ color, fontWeight, transition: 'color 0.2s', margin: '0 2px' }}>{word} </span>
+                    })
+                  )}
                 </div>
               </div>
             )}
 
-            {isDelegated && (
-              <div style={{ textAlign: 'center', color: '#2dd4bf', fontWeight: 700, fontSize: '1rem', padding: '24px 0' }}>
-                ✓ Agent Root starting... Working on your {handToAI.length} AI tasks
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+              <button 
+                className="delegate-btn action-btn" 
+                onClick={() => {
+                  setIsDelegated(true)
+                  setTimeout(() => navigate('/dashboard?panel=agent', { state: { tasks: TASKS, expandAgent: true } }), 1000)
+                }} 
+                disabled={isDelegated}
+                style={{ width: '100%', padding: '16px', borderRadius: '9999px', fontWeight: 700, color: 'white', border: 'none', cursor: isDelegated ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: isDelegated ? 'none' : '0 8px 24px rgba(74,158,150,0.35)', opacity: isDelegated ? 0.6 : 1, transition: 'all 0.3s' }}
+              >
+                {isDelegated ? 'Tasks Delegated' : 'Delegate →'}
+              </button>
+              <div style={{ position: 'relative' }}>
+                <button className="think-btn action-btn" onClick={() => navigate('/dashboard?panel=focus', { state: { tasks: TASKS, expandFocus: true } })} style={{ width: '100%', padding: '16px', borderRadius: '9999px', fontWeight: 700, color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 8px 24px rgba(212,98,42,0.35)' }}>Think →</button>
+                <div className="think-tooltip">Goes to Your Focus</div>
               </div>
-            )}
-
-            {!isDelegated && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-                <button className="delegate-btn action-btn" onClick={() => setIsDelegated(true)} style={{ width: '100%', padding: '16px', borderRadius: '9999px', fontWeight: 700, color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 8px 24px rgba(74,158,150,0.35)' }}>Delegate →</button>
-                <div style={{ position: 'relative' }}>
-                  <button className="think-btn action-btn" onClick={() => setShowThinkTransition(true)} style={{ width: '100%', padding: '16px', borderRadius: '9999px', fontWeight: 700, color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', boxShadow: '0 8px 24px rgba(212,98,42,0.35)' }}>Think →</button>
-                  <div className="think-tooltip">Goes to Thinking Canvas</div>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
         </div>
       )}
