@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { ReactFlow, useNodesState, useEdgesState, addEdge, Handle, Position } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 
@@ -73,6 +73,8 @@ const FIX_POSITIONS = [
 
 export default function Whiteboard() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const activeTask = location.state?.activeTask || 'Finalise the press release'
   const [showAiPanel, setShowAiPanel] = useState(false)
   const [showStartBtn, setShowStartBtn] = useState(true)
   const [isExportModalOpen, setIsExportModalOpen] = useState(false)
@@ -205,125 +207,107 @@ NEXT STEPS
   }
 
   useEffect(() => {
-    const initializeCanvas = async () => {
-      const cWidth = 280; const cHeight = 200;
+    const initializeCanvas = () => {
+      const cWidth = 280;
+      const cHeight = 200;
       const cX = window.innerWidth / 2 - cWidth / 2;
       const cY = window.innerHeight / 2 - cHeight / 2;
 
-      const buildNodes = (centralText, ideaItems, isGenerating) => {
-        const central = {
-          id: 'central',
-          type: 'central',
-          position: { x: cX, y: cY },
-          data: { text: centralText, isGenerating }
-        }
-        
-        const ideas = ideaItems.map((item, i) => {
-          const fallbackPos = FIX_POSITIONS[i % 4]
-          // Normalize: item.data exists if loading from storage, else use item directly (from API)
-          const nodeText = item.data?.text !== undefined ? item.data.text : (item.text || '')
-          const nodeChip = item.data?.chip !== undefined ? item.data.chip : (item.chip || '')
-          const nodeX = item.position?.x !== undefined ? item.position.x : (item.x !== undefined ? item.x : cX + fallbackPos.x)
-          const nodeY = item.position?.y !== undefined ? item.position.y : (item.y !== undefined ? item.y : cY + fallbackPos.y)
-
-          return {
-            id: item.id || `node-${Date.now()}-${i}`,
-            type: 'idea',
-            position: { x: nodeX, y: nodeY },
-            data: {
-              text: nodeText, chip: nodeChip, isEditing: item.data?.isEditing || item.isEditing || false,
-              onClick: handleNodeClick, onBlur: handleNodeBlur
-            }
-          }
-        })
-        
-        return [central, ...ideas]
+      // Persistence check based on task
+      const savedTask = localStorage.getItem('thrivee_canvas_task')
+      const storedNodes = localStorage.getItem('thrivee_canvas_nodes')
+      
+      if (savedTask === activeTask && storedNodes) {
+        console.log('[Whiteboard] Loading saved session for task:', activeTask)
+        const parsedNodes = JSON.parse(storedNodes)
+        setNodes(parsedNodes.map(n => ({
+          ...n,
+          data: { ...n.data, onClick: handleNodeClick, onBlur: handleNodeBlur }
+        })))
+        const storedEdges = localStorage.getItem('thrivee_canvas_edges')
+        if (storedEdges) setEdges(JSON.parse(storedEdges))
+        setShowStartBtn(false)
+        return
       }
 
-      try {
-        const storedCanvas = localStorage.getItem('thrivee_canvas')
-        const storedNodes = localStorage.getItem('thrivee_canvas_nodes')
-        if (storedCanvas && storedNodes) {
-          console.log('[Whiteboard] Loading existing session from storage...')
-          const parsedCanvas = JSON.parse(storedCanvas)
-          const parsedIdeas = JSON.parse(storedNodes).filter(n => n.id !== 'central')
+      // Fresh Start or Task Switch
+      console.log('[Whiteboard] Initializing fresh canvas for:', activeTask)
+      localStorage.setItem('thrivee_canvas_task', activeTask)
+      setShowStartBtn(false)
+
+      const isPressRelease = activeTask.toLowerCase().includes('press release')
+
+      if (isPressRelease) {
+        const centralText = "What angle gets maximum news pickups?"
+        const nodesList = [
+          { id: 'central', type: 'central', position: { x: cX, y: cY }, data: { text: centralText, isGenerating: false } },
           
-          setNodes(buildNodes(parsedCanvas.central, parsedIdeas, false))
-          
-          const storedEdges = localStorage.getItem('thrivee_canvas_edges')
-          if (storedEdges) {
-            setEdges(JSON.parse(storedEdges))
-          } else {
-            const newEdges = parsedIdeas.map(idNode => ({
-              id: `e-central-${idNode.id || idNode.text}`,
-              source: 'central',
-              target: idNode.id,
-              style: { strokeDasharray: '4 4', stroke: '#D4622A', strokeWidth: 1.5, opacity: 0.8 },
-              animated: false
-            }))
-            setEdges(newEdges)
-            localStorage.setItem('thrivee_canvas_edges', JSON.stringify(newEdges))
-          }
-          setShowStartBtn(false)
-          return
-        }
+          { id: 'b1', type: 'idea', position: { x: cX - 350, y: cY - 200 }, data: { text: 'Market data angle', chip: 'OPTION 1', isEditing: false, onClick: handleNodeClick, onBlur: handleNodeBlur } },
+          { id: 's1-1', type: 'idea', position: { x: cX - 600, y: cY - 280 }, data: { text: '14 hrs/week lost to grunt work', chip: 'DATA', isEditing: false, onClick: handleNodeClick, onBlur: handleNodeBlur } },
+          { id: 's1-2', type: 'idea', position: { x: cX - 600, y: cY - 200 }, data: { text: 'WEF — 92M jobs shifting by 2030', chip: 'SIGNAL', isEditing: false, onClick: handleNodeClick, onBlur: handleNodeBlur } },
+          { id: 's1-3', type: 'idea', position: { x: cX - 600, y: cY - 120 }, data: { text: '✓ Strongest for journalists', chip: 'PRO', isEditing: false, onClick: handleNodeClick, onBlur: handleNodeBlur } },
 
-        const storedTasks = localStorage.getItem('thrivee_tasks')
-        if (!storedTasks) throw new Error('No tasks found')
-        
-        const tasksList = JSON.parse(storedTasks)
-        const firstProtect = tasksList.find(t => t.category === 'protect' || t.category === 'own')
-        if (!firstProtect) {
-          console.warn('[Whiteboard] No protect task found in list')
-          throw new Error('No protect task found')
-        }
+          { id: 'b2', type: 'idea', position: { x: cX + 350, y: cY - 200 }, data: { text: 'Founder story angle', chip: 'OPTION 2', isEditing: false, onClick: handleNodeClick, onBlur: handleNodeBlur } },
+          { id: 's2-1', type: 'idea', position: { x: cX + 600, y: cY - 280 }, data: { text: 'Had to let someone go on a Friday', chip: 'HOOK', isEditing: false, onClick: handleNodeClick, onBlur: handleNodeBlur } },
+          { id: 's2-2', type: 'idea', position: { x: cX + 600, y: cY - 200 }, data: { text: 'Not skill — system problem', chip: 'INSIGHT', isEditing: false, onClick: handleNodeClick, onBlur: handleNodeBlur } },
+          { id: 's2-3', type: 'idea', position: { x: cX + 600, y: cY - 120 }, data: { text: 'Human, emotional, shareable', chip: 'PRO', isEditing: false, onClick: handleNodeClick, onBlur: handleNodeBlur } },
 
-        console.log('[Whiteboard] Found protect task for canvas:', firstProtect.text || firstProtect.task)
-        setNodes([{ id: 'central', type: 'central', position: { x: cX, y: cY }, data: { text: "Generating Mind Map...", isGenerating: true } }])
-        
-        console.log('[Whiteboard] Calling /api/generate-canvas with:', firstProtect.text || firstProtect.task)
-        const res = await fetch('/api/generate-canvas', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ taskText: firstProtect.text || firstProtect.task })
-        })
+          { id: 'b3', type: 'idea', position: { x: cX - 350, y: cY + 200 }, data: { text: 'Product launch angle', chip: 'OPTION 3', isEditing: false, onClick: handleNodeClick, onBlur: handleNodeBlur } },
+          { id: 's3-1', type: 'idea', position: { x: cX - 600, y: cY + 200 }, data: { text: "Thrive's AI playbook feature", chip: 'PRODUCT', isEditing: false, onClick: handleNodeClick, onBlur: handleNodeBlur } },
+          { id: 's3-2', type: 'idea', position: { x: cX - 600, y: cY + 280 }, data: { text: '⚠ Risk: too internal, low news value', chip: 'CON', isEditing: false, onClick: handleNodeClick, onBlur: handleNodeBlur } },
 
-        if (!res.ok) throw new Error(await res.text())
-        const data = await res.json()
-        console.log('[Whiteboard] API Response parsed:', data)
+          { id: 'b4', type: 'idea', position: { x: cX + 350, y: cY + 200 }, data: { text: 'Regional Ugadi hook', chip: 'OPTION 4', isEditing: false, onClick: handleNodeClick, onBlur: handleNodeBlur } },
+          { id: 's4-1', type: 'idea', position: { x: cX + 600, y: cY + 120 }, data: { text: 'Vernacular-first — 3-4x engagement', chip: 'SIGNAL', isEditing: false, onClick: handleNodeClick, onBlur: handleNodeBlur } },
+          { id: 's4-2', type: 'idea', position: { x: cX + 600, y: cY + 200 }, data: { text: 'Tanishq and Paper Boat doing this now', chip: 'CONTEXT', isEditing: false, onClick: handleNodeClick, onBlur: handleNodeBlur } },
+          { id: 's4-3', type: 'idea', position: { x: cX + 600, y: cY + 280 }, data: { text: '✓ Timely, culturally relevant', chip: 'PRO', isEditing: false, onClick: handleNodeClick, onBlur: handleNodeBlur } },
+        ]
 
-        // Map AI nodes to our React Flow structure
-        const aiNodes = data.nodes.map(n => ({
-          text: n.question,
-          chip: n.tag
-        }))
+        const edgesList = [
+          { id: 'e-b1', source: 'central', target: 'b1' },
+          { id: 'e-b2', source: 'central', target: 'b2' },
+          { id: 'e-b3', source: 'central', target: 'b3' },
+          { id: 'e-b4', source: 'central', target: 'b4' },
+          { id: 'e-s1-1', source: 'b1', target: 's1-1' },
+          { id: 'e-s1-2', source: 'b1', target: 's1-2' },
+          { id: 'e-s1-3', source: 'b1', target: 's1-3' },
+          { id: 'e-s2-1', source: 'b2', target: 's2-1' },
+          { id: 'e-s2-2', source: 'b2', target: 's2-2' },
+          { id: 'e-s2-3', source: 'b2', target: 's2-3' },
+          { id: 'e-s3-1', source: 'b3', target: 's3-1' },
+          { id: 'e-s3-2', source: 'b3', target: 's3-2' },
+          { id: 'e-s4-1', source: 'b4', target: 's4-1' },
+          { id: 'e-s4-2', source: 'b4', target: 's4-2' },
+          { id: 'e-s4-3', source: 'b4', target: 's4-3' },
+        ].map(e => ({ ...e, style: { strokeDasharray: '4 4', stroke: '#D4622A', strokeWidth: 1.5, opacity: 0.8 } }))
 
-        const finalNodes = buildNodes(data.central, aiNodes, false)
-        const newEdges = finalNodes.filter(n => n.id !== 'central').map(idNode => ({
-          id: `e-central-${idNode.id}`,
-          source: 'central',
-          target: idNode.id,
-          style: { strokeDasharray: '4 4', stroke: '#D4622A', strokeWidth: 1.5, opacity: 0.8 },
-          animated: false
-        }))
+        setNodes(nodesList)
+        setEdges(edgesList)
+        localStorage.setItem('thrivee_canvas_nodes', JSON.stringify(nodesList))
+        localStorage.setItem('thrivee_canvas_edges', JSON.stringify(edgesList))
+      } else {
+        const nodesList = [
+          { id: 'central', type: 'central', position: { x: cX, y: cY }, data: { text: activeTask, isGenerating: false } },
+          { id: 'b1', type: 'idea', position: { x: cX - 300, y: cY - 150 }, data: { text: '', chip: 'NODE 1', isEditing: false, onClick: handleNodeClick, onBlur: handleNodeBlur } },
+          { id: 'b2', type: 'idea', position: { x: cX + 300, y: cY - 150 }, data: { text: '', chip: 'NODE 2', isEditing: false, onClick: handleNodeClick, onBlur: handleNodeBlur } },
+          { id: 'b3', type: 'idea', position: { x: cX - 300, y: cY + 150 }, data: { text: '', chip: 'NODE 3', isEditing: false, onClick: handleNodeClick, onBlur: handleNodeBlur } },
+          { id: 'b4', type: 'idea', position: { x: cX + 300, y: cY + 150 }, data: { text: '', chip: 'NODE 4', isEditing: false, onClick: handleNodeClick, onBlur: handleNodeBlur } },
+        ]
+        const edgesList = [
+          { id: 'e-b1', source: 'central', target: 'b1' },
+          { id: 'e-b2', source: 'central', target: 'b2' },
+          { id: 'e-b3', source: 'central', target: 'b3' },
+          { id: 'e-b4', source: 'central', target: 'b4' },
+        ].map(e => ({ ...e, style: { strokeDasharray: '4 4', stroke: '#D4622A', strokeWidth: 1.5, opacity: 0.8 } }))
 
-        localStorage.setItem('thrivee_canvas', JSON.stringify({ central: data.central }))
-        localStorage.setItem('thrivee_canvas_nodes', JSON.stringify(finalNodes.filter(n => n.id !== 'central')))
-        localStorage.setItem('thrivee_canvas_edges', JSON.stringify(newEdges))
-        
-        setNodes(finalNodes)
-        setEdges(newEdges)
-        setShowStartBtn(false)
-
-      } catch (e) {
-        console.error('Failed Canvas init:', e)
-        const cWidth = 280; const cHeight = 200;
-        setNodes([{ id: 'central', type: 'central', position: { x: window.innerWidth/2 - cWidth/2, y: window.innerHeight/2 - cHeight/2 }, data: { text: "Why are Hubli girls not signing up?", isGenerating: false } }])
+        setNodes(nodesList)
+        setEdges(edgesList)
+        localStorage.setItem('thrivee_canvas_nodes', JSON.stringify(nodesList))
+        localStorage.setItem('thrivee_canvas_edges', JSON.stringify(edgesList))
       }
     }
-    
+
     initializeCanvas()
-  }, [handleNodeClick, handleNodeBlur, setEdges, setNodes])
+  }, [activeTask, handleNodeClick, handleNodeBlur, setEdges, setNodes])
 
   useEffect(() => {
     if (chatScrollRef.current) chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight

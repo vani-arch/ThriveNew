@@ -33,10 +33,13 @@ export default function Dashboard() {
 
   const panel = searchParams.get('panel') // 'agent' | 'focus'
 
-  // Read tasks passed from Tasks screen, fall back to demo data
+  // Read tasks passed from Tasks screen, fall back to persistent storage or demo data
+  const storedAutomate = JSON.parse(localStorage.getItem('thrivee_hand_to_ai') || 'null')
+  const storedOwn = JSON.parse(localStorage.getItem('thrivee_protect') || 'null')
+  
   const {
-    automateTasks = FALLBACK_AUTOMATE,
-    ownTasks      = FALLBACK_OWN,
+    automateTasks = (storedAutomate || FALLBACK_AUTOMATE).map(t => t.task ? t : { ...t, task: t.text }),
+    ownTasks      = (storedOwn || FALLBACK_OWN).map(t => t.task ? t : { ...t, task: t.text }),
   } = location.state || {}
 
   const user = auth.currentUser
@@ -47,7 +50,10 @@ export default function Dashboard() {
   const [panelState,      setPanelState]      = useState('default')
   const [statsCollapsed,  setStatsCollapsed]  = useState(false)
   const [activeTab,       setActiveTab]       = useState('insights')
-  const [activePillIndex, setActivePillIndex] = useState(0)  // index into ownTasks
+  
+  // Set default active pill to the first 'high' priority task or fallback to 0
+  const initialPillIndex = ownTasks.findIndex(t => t.urgency === 'high')
+  const [activePillIndex, setActivePillIndex] = useState(initialPillIndex !== -1 ? initialPillIndex : 0)  // index into ownTasks
   const [instinct,        setInstinct]        = useState('')
   const [showResponse,    setShowResponse]    = useState(false)
   const [stickyCollapsed, setStickyCollapsed] = useState(false)
@@ -64,11 +70,14 @@ export default function Dashboard() {
 
   // Trigger animations on mount
   useEffect(() => {
+    // Determine the first 3 tasks for the specialized demo animations
+    const firstThreeIds = automateTasks.slice(0, 3).map(t => t.id)
+    
     const tasksToAnimate = [
-      { id: 1, duration: 8000 },
-      { id: 2, duration: 14000 },
-      { id: 3, duration: 20000 },
-    ]
+      { id: firstThreeIds[0], duration: 8000 },
+      { id: firstThreeIds[1], duration: 14000 },
+      { id: firstThreeIds[2], duration: 20000 },
+    ].filter(t => t.id !== undefined)
     
     tasksToAnimate.forEach(({ id, duration }) => {
       let currentProgress = 0
@@ -84,11 +93,16 @@ export default function Dashboard() {
         setTaskProgressMap(prev => ({ ...prev, [id]: Math.floor(currentProgress) }))
       }, 100)
     })
-  }, [])
+  }, [automateTasks])
 
   const toastFiredRef = useRef(false)
   useEffect(() => {
-    if (taskProgressMap[1] === 100 && taskProgressMap[2] === 100 && taskProgressMap[3] === 100) {
+    const firstThreeIds = automateTasks.slice(0, 3).map(t => t.id)
+    if (firstThreeIds.length < 3) return
+
+    const allDone = firstThreeIds.every(id => taskProgressMap[id] === 100)
+    
+    if (allDone) {
       if (!toastFiredRef.current) {
         toastFiredRef.current = true
         console.log('AGENT ROOT: All tasks complete. Firing toast.')
@@ -96,7 +110,7 @@ export default function Dashboard() {
         setTimeout(() => setShowToast(false), 10000)
       }
     }
-  }, [taskProgressMap])
+  }, [taskProgressMap, automateTasks])
 
   const handleViewWork = async (taskName) => {
     setActiveTaskWork({ task: taskName, output: '' })
@@ -452,12 +466,13 @@ export default function Dashboard() {
                         const id = t.id ?? (i + 1)
                         const prog = taskProgressMap[id] ?? taskProgress(id)
                         const isDone = prog === 100
-                        const isSpecial = id <= 3
+                        const firstThreeIds = automateTasks.slice(0, 3).map(k => k.id)
+                        const isSpecial = firstThreeIds.includes(id)
 
                         return (
                           <div key={id} className="agent-task-card">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                              <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>⚙️ {t.task}</span>
+                              <span style={{ fontSize: '0.875rem', fontWeight: 500 }}>⚙️ {t.task || t.text}</span>
                               <span className={isDone ? 'teal-text' : ''} style={{ fontSize: '0.625rem', fontWeight: 700, flexShrink: 0, marginLeft: '8px', color: isDone ? '#2dd4bf' : 'inherit' }}>
                                 {isDone ? '✓ Complete' : `${prog}%`}
                               </span>
@@ -542,7 +557,7 @@ export default function Dashboard() {
                           className={`pill-btn ${activePillIndex === i ? 'pill-active' : 'pill-inactive'}`}
                           onClick={() => setActivePillIndex(i)}
                         >
-                          {task.task}
+                          {task.task || task.text}
                         </button>
                       ))}
                     </div>
@@ -590,7 +605,7 @@ export default function Dashboard() {
                         )}
 
                         <button
-                          onClick={() => navigate('/whiteboard')}
+                          onClick={() => navigate('/whiteboard', { state: { activeTask: activePillTask } })}
                           style={{ width: '100%', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #D4622A', color: '#D4622A', fontWeight: 700, borderRadius: '12px', background: 'transparent', cursor: 'pointer', transition: 'all 0.2s', marginTop: '32px' }}
                         >
                           Thinking Canvas →
@@ -629,7 +644,7 @@ export default function Dashboard() {
                           </div>
                           <p style={{ fontSize: '1.125rem', lineHeight: 1.6, color: 'rgba(255,255,255,0.8)', fontWeight: 500 }}>You've identified the signals. Now map the full strategy.</p>
                           <button
-                            onClick={() => navigate('/whiteboard')}
+                            onClick={() => navigate('/whiteboard', { state: { activeTask: activePillTask } })}
                             className="pulse-soft"
                             style={{ width: '100%', border: '2px solid #D4622A', color: '#D4622A', fontWeight: 900, padding: '16px 32px', borderRadius: '12px', textTransform: 'uppercase', letterSpacing: '0.15em', fontSize: '0.75rem', background: 'transparent', cursor: 'pointer', transition: 'all 0.2s' }}
                           >

@@ -158,6 +158,13 @@ export default function Tasks() {
 
       if (!sessionSavedRef.current) {
         sessionSavedRef.current = true
+        
+        // --- Persistence for Dashboard retrieval ---
+        try {
+          localStorage.setItem('thrivee_hand_to_ai', JSON.stringify(handToAI))
+          localStorage.setItem('thrivee_protect', JSON.stringify(protect))
+        } catch (e) {}
+        
         let title = 'Tasks & more'
         if (protect.length > 0) {
           title = protect[0].text.split(' ').slice(0, 4).join(' ') + ' & more'
