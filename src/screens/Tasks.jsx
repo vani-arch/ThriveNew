@@ -79,6 +79,7 @@ export default function Tasks() {
     setTimeout(() => {
       setPhase('sorted')
       setShowVoiceChat(true)
+      setIsSpeaking(true) // Start visual animation immediately
     }, 480)
   }
 
@@ -195,24 +196,28 @@ export default function Tasks() {
   )
 
   const backgroundRings = (
-    <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: -1 }}>
+    <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 1 }}>
       {/* Top Left */}
-      <div style={{ position: 'absolute', top: '-100px', left: '-100px', width: '200px', height: '200px', borderRadius: '50%', border: '1px solid rgba(212,98,42,0.10)' }} />
-      <div style={{ position: 'absolute', top: '-170px', left: '-170px', width: '340px', height: '340px', borderRadius: '50%', border: '1px solid rgba(212,98,42,0.06)' }} />
-      <div style={{ position: 'absolute', top: '-240px', left: '-240px', width: '480px', height: '480px', borderRadius: '50%', border: '1px solid rgba(212,98,42,0.04)' }} />
+      <div style={{ position: 'absolute', top: '-100px', left: '-100px', width: '200px', height: '200px', borderRadius: '50%', border: '1px solid rgba(212,98,42,0.15)' }} />
+      <div style={{ position: 'absolute', top: '-170px', left: '-170px', width: '340px', height: '340px', borderRadius: '50%', border: '1px solid rgba(212,98,42,0.10)' }} />
+      <div style={{ position: 'absolute', top: '-240px', left: '-240px', width: '480px', height: '480px', borderRadius: '50%', border: '1px solid rgba(212,98,42,0.06)' }} />
       
       {/* Bottom Right */}
-      <div style={{ position: 'absolute', bottom: '-90px', right: '-90px', width: '180px', height: '180px', borderRadius: '50%', border: '1px solid rgba(29,158,117,0.08)' }} />
-      <div style={{ position: 'absolute', bottom: '-150px', right: '-150px', width: '300px', height: '300px', borderRadius: '50%', border: '1px solid rgba(29,158,117,0.05)' }} />
-      <div style={{ position: 'absolute', bottom: '-200px', right: '-200px', width: '400px', height: '400px', borderRadius: '50%', border: '1px solid rgba(29,158,117,0.03)' }} />
+      <div style={{ position: 'absolute', bottom: '-90px', right: '-90px', width: '180px', height: '180px', borderRadius: '50%', border: '1px solid rgba(29,158,117,0.12)' }} />
+      <div style={{ position: 'absolute', bottom: '-150px', right: '-150px', width: '300px', height: '300px', borderRadius: '50%', border: '1px solid rgba(29,158,117,0.08)' }} />
+      <div style={{ position: 'absolute', bottom: '-200px', right: '-200px', width: '400px', height: '400px', borderRadius: '50%', border: '1px solid rgba(29,158,117,0.05)' }} />
     </div>
   )
 
   return (
     <div style={{ backgroundColor: '#0f1716', color: '#dce4e2', fontFamily: "'Plus Jakarta Sans', sans-serif", minHeight: '100vh', overflowX: 'hidden', position: 'relative' }}>
+      {/* Layer background colors and patterns below everything else */}
+      <div style={{ position: 'fixed', inset: 0, backgroundColor: '#0f1716', zIndex: 0 }} />
       {backgroundRings}
-      <style>{`
-        .task-card { background-color: rgba(255, 255, 255, 0.07); border-radius: 12px; display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; border-left: 3px solid transparent; transition: background-color 0.2s ease; }
+      
+      <div style={{ position: 'relative', zIndex: 10 }}> 
+        <style>{`
+          .task-card { background-color: rgba(255, 255, 255, 0.07); border-radius: 12px; display: flex; align-items: center; justify-content: space-between; padding: 18px 20px; border-left: 3px solid transparent; transition: background-color 0.2s ease; }
         .task-card:hover { background-color: rgba(255,255,255,0.11); }
         .task-card.border-teal { border-left-color: #2dd4bf; }
         .task-card.border-orange { border-left-color: #D4622A; }
@@ -369,6 +374,7 @@ export default function Tasks() {
           </div>
         </div>
       )}
+      </div>
     </div>
   )
 }
