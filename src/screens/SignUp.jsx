@@ -275,7 +275,7 @@ export default function SignUp() {
 
       <footer style={{ width: '100%', padding: '24px 0', textAlign: 'center', position: 'relative', zIndex: 10 }}>
         <p style={{ fontSize: '0.625rem', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: 700, color: 'rgba(220,228,226,0.3)' }}>
-          © 2024 Thrivee. Built for the Nocturnal Architect.
+          © 2026 Thrive. Give the grunt work to AI. Discover what only YOU can do.
         </p>
       </footer>
     </div>

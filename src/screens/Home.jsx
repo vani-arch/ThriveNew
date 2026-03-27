@@ -6,8 +6,9 @@ import { auth } from '../firebase'
 export default function Home() {
   const navigate  = useNavigate()
   const user = auth.currentUser
-  const rawName = user?.displayName || (user?.email ? user.email.split('@')[0].split('.')[0] : 'Megha')
-  const userName = rawName.charAt(0).toUpperCase() + rawName.slice(1)
+  const rawName = user?.displayName || localStorage.getItem('userName') || (user?.email ? user.email.split('@')[0] : 'Megha')
+  const firstNamePart = rawName.split(' ')[0].split('.')[0].split('_')[0]
+  const userName = firstNamePart.charAt(0).toUpperCase() + firstNamePart.slice(1).toLowerCase()
   const [isRecording, setIsRecording] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [loadingPhase, setLoadingPhase] = useState('') // 'reading' | 'sorting'
@@ -261,8 +262,8 @@ export default function Home() {
 
       {/* Main Content */}
       <main style={{ width: '100%', maxWidth: '600px', margin: '0 auto', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', paddingTop: '100px', paddingBottom: '40px', paddingLeft: '24px', paddingRight: '24px' }}>
-        <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em', color: 'rgba(222,192,181,0.6)', marginBottom: '16px' }}>
-          GOOD MORNING, {userName.toUpperCase()}
+        <span style={{ fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.2em', color: 'rgba(222,192,181,0.6)', marginBottom: '16px' }}>
+          GOOD MORNING, {userName}
         </span>
 
         <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3rem)', fontWeight: 800, letterSpacing: '-0.04em', color: '#dce4e2', marginBottom: '48px', lineHeight: 1.15 }}>

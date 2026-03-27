@@ -40,8 +40,9 @@ export default function Dashboard() {
   } = location.state || {}
 
   const user = auth.currentUser
-  const rawName = user?.displayName || (user?.email ? user.email.split('@')[0].split('.')[0] : 'Megha')
-  const userName = rawName.charAt(0).toUpperCase() + rawName.slice(1)
+  const rawName = user?.displayName || localStorage.getItem('userName') || (user?.email ? user.email.split('@')[0] : 'Megha')
+  const firstNamePart = rawName.split(' ')[0].split('.')[0].split('_')[0]
+  const userName = firstNamePart.charAt(0).toUpperCase() + firstNamePart.slice(1).toLowerCase()
 
   const [panelState,      setPanelState]      = useState('default')
   const [statsCollapsed,  setStatsCollapsed]  = useState(false)
