@@ -70,29 +70,33 @@ export default function Dashboard() {
 
   // Trigger animations on mount
   useEffect(() => {
-    // Determine the first 3 tasks for the specialized demo animations
     const firstThreeIds = automateTasks.slice(0, 3).map(t => t.id)
-    
-    const tasksToAnimate = [
-      { id: firstThreeIds[0], duration: 8000 },
-      { id: firstThreeIds[1], duration: 14000 },
-      { id: firstThreeIds[2], duration: 20000 },
-    ].filter(t => t.id !== undefined)
-    
-    tasksToAnimate.forEach(({ id, duration }) => {
-      let currentProgress = 0
-      const totalSteps = duration / 100 // update every 100ms
-      const stepSize = 100 / totalSteps
+    const intervals = [];
+
+    const animateBar = (taskIndex, targetDuration) => {
+      const id = firstThreeIds[taskIndex];
+      if (id === undefined) return;
+
+      let progress = 0;
+      const increment = 100 / (targetDuration / 100);
       
-      const timer = setInterval(() => {
-        currentProgress += stepSize
-        if (currentProgress >= 100) {
-          currentProgress = 100
-          clearInterval(timer)
+      const interval = setInterval(() => {
+        progress = Math.min(progress + increment, 100);
+        setTaskProgressMap(prev => ({ ...prev, [id]: Math.round(progress) }));
+        
+        if (progress >= 100) {
+          clearInterval(interval);
         }
-        setTaskProgressMap(prev => ({ ...prev, [id]: Math.floor(currentProgress) }))
-      }, 100)
-    })
+      }, 100);
+      
+      intervals.push(interval);
+    };
+
+    animateBar(0, 8000);   // UTM links — 8 seconds
+    animateBar(1, 14000);  // Competitor analysis — 14 seconds  
+    animateBar(2, 20000);  // Social captions — 20 seconds
+
+    return () => intervals.forEach(clearInterval);
   }, [automateTasks])
 
   const toastFiredRef = useRef(false)
@@ -605,7 +609,7 @@ export default function Dashboard() {
                         )}
 
                         <button
-                          onClick={() => navigate('/whiteboard', { state: { activeTask: activePillTask } })}
+                          onClick={() => navigate('/whiteboard')}
                           style={{ width: '100%', height: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #D4622A', color: '#D4622A', fontWeight: 700, borderRadius: '12px', background: 'transparent', cursor: 'pointer', transition: 'all 0.2s', marginTop: '32px' }}
                         >
                           Thinking Canvas →
@@ -644,7 +648,7 @@ export default function Dashboard() {
                           </div>
                           <p style={{ fontSize: '1.125rem', lineHeight: 1.6, color: 'rgba(255,255,255,0.8)', fontWeight: 500 }}>You've identified the signals. Now map the full strategy.</p>
                           <button
-                            onClick={() => navigate('/whiteboard', { state: { activeTask: activePillTask } })}
+                            onClick={() => navigate('/whiteboard')}
                             className="pulse-soft"
                             style={{ width: '100%', border: '2px solid #D4622A', color: '#D4622A', fontWeight: 900, padding: '16px 32px', borderRadius: '12px', textTransform: 'uppercase', letterSpacing: '0.15em', fontSize: '0.75rem', background: 'transparent', cursor: 'pointer', transition: 'all 0.2s' }}
                           >
