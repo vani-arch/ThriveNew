@@ -138,16 +138,16 @@ export default function Dashboard() {
   return (
     <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", backgroundColor: '#0f1716', color: '#dce4e2', minHeight: '100vh' }}>
       <style>{`
-        .panel-container { display: flex; gap: 1.5rem; min-height: calc(100vh - 200px); }
-        .panel-half { flex: 1; background: #192120; border: 1px solid rgba(87,66,58,0.1); borderRadius: 16px; overflow: hidden; display: flex; flexDirection: column; }
-        .progress-bar { width: 100%; height: 4px; background: rgba(255,255,255,0.05); borderRadius: 9999px; overflow: hidden; margin: 8px 0; }
+        .panel-container { display: flex; gap: 1.5rem; height: 780px; width: 100%; align-items: stretch; }
+        .panel-half { flex: 1; min-width: 0; background: #192120; border: 1px solid rgba(87,66,58,0.1); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; }
+        .progress-bar { width: 100%; height: 4px; background: rgba(255,255,255,0.05); border-radius: 9999px; overflow: hidden; margin: 8px 0; }
         .progress-fill { height: 100%; transition: width 0.15s linear; }
-        .tab-btn { padding: 8px 16px; font-size: 0.75rem; fontWeight: 700; borderRadius: 9999px; border: none; background: transparent; cursor: pointer; color: rgba(255,255,255,0.3); transition: all 0.2s; }
+        .tab-btn { padding: 8px 16px; font-size: 0.75rem; font-weight: 700; border-radius: 9999px; border: none; background: transparent; cursor: pointer; color: rgba(255,255,255,0.3); transition: all 0.2s; white-space: nowrap; }
         .tab-btn.active { color: #D4622A; background: rgba(212,98,42,0.1); }
-        .pill { padding: 8px 16px; borderRadius: 9999px; font-size: 0.75rem; fontWeight: 700; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; white-space: nowrap; }
+        .pill { padding: 8px 16px; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; white-space: nowrap; transition: all 0.2s; flex-shrink: 0; }
         .pill.active { background: #D4622A; border-color: #D4622A; color: white; }
         .pill.inactive { background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.4); }
-        .signal-card { padding: 20px; borderRadius: 12px; border: 1px solid rgba(87,66,58,0.1); background: rgba(255,255,255,0.03); margin-bottom: 16px; }
+        .signal-card { padding: 24px; border-radius: 12px; border: 1px solid rgba(87,66,58,0.1); background: rgba(255,255,255,0.03); margin-bottom: 20px; width: 100%; }
         .pulse-soft { animation: pulse 2s infinite; }
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(212,98,42,0.4); } 70% { box-shadow: 0 0 0 10px rgba(212,98,42,0); } 100% { box-shadow: 0 0 0 0 rgba(212,98,42,0); } }
       `}</style>
@@ -223,10 +223,10 @@ export default function Dashboard() {
               <div className="pill inactive">Prep my investor update</div>
             </div>
 
-            <div style={{ flexGrow: 1, padding: '40px' }}>
+            <div style={{ flexGrow: 1, padding: '40px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
               {activeTab === 'insights' && (
-                <div style={{ textAlign: 'center', maxWidth: '500px', margin: '0 auto' }}>
-                  <h3 style={{ fontSize: '1.75rem', fontWeight: 300, marginBottom: '32px' }}>What's blocking progress on: <span style={{ color: '#D4622A', fontWeight: 700 }}>Finalise the press release for Ugadi campaign?</span></h3>
+                <div style={{ width: '100%', maxWidth: '500px' }}>
+                  <h3 style={{ fontSize: '1.75rem', fontWeight: 300, marginBottom: '32px', textAlign: 'center' }}>What's blocking progress on: <br/><span style={{ color: '#D4622A', fontWeight: 700 }}>Finalise the press release for Ugadi campaign?</span></h3>
                   <div style={{ position: 'relative' }}>
                     <input type="text" placeholder="What's your instinct?" style={{ width: '100%', padding: '16px 20px', background: '#1A1A1A', border: '1px solid #D4622A', borderRadius: '12px', color: 'white', outline: 'none' }} />
                     <button style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: '#D4622A', cursor: 'pointer' }} className="material-symbols-outlined">arrow_forward</button>
@@ -235,7 +235,7 @@ export default function Dashboard() {
               )}
 
               {activeTab === 'signals' && (
-                <div style={{ maxWidth: '600px', margin: '0 auto' }}>
+                <div style={{ width: '100%', maxWidth: '600px' }}>
                   <div className="signal-card">
                     <p style={{ fontWeight: 600, fontSize: '0.9375rem', lineHeight: 1.6 }}>"Brands like Tanishq and Paper Boat are leading Ugadi 2026 campaigns with vernacular-first content seeing 3-4x higher engagement than Hindi-only."</p>
                     <p style={{ marginTop: '12px', fontSize: '0.8125rem', color: 'rgba(255,255,255,0.4)', fontStyle: 'italic' }}>Your press release should lead with a regional language hook to match where media attention is going.</p>
@@ -248,7 +248,7 @@ export default function Dashboard() {
               )}
 
               {activeTab === 'next' && (
-                <div style={{ textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '24px' }}>
+                <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '24px' }}>
                   <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(212,98,42,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span className="material-symbols-outlined" style={{ fontSize: '2.5rem', color: '#D4622A' }}>rocket_launch</span></div>
                   <p style={{ fontSize: '1.125rem', color: 'rgba(255,255,255,0.8)' }}>You've identified the signals. Now map the full strategy.</p>
                   <button onClick={() => navigate('/whiteboard')} className="pulse-soft" style={{ background: 'transparent', border: '2px solid #D4622A', color: '#D4622A', fontWeight: 900, padding: '16px 32px', borderRadius: '12px', textTransform: 'uppercase', letterSpacing: '0.15em', cursor: 'pointer' }}>THINKING CANVAS →</button>
