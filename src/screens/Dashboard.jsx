@@ -4,13 +4,13 @@ import { auth } from '../firebase'
 
 // ─── Fallbacks when navigated to directly ────────────────────────────────────
 const FALLBACK_AUTOMATE = [
-  { id: 1, task: 'Resize 40 festive Ugadi banners',      category: 'automate' },
-  { id: 2, task: 'Generate UTM links for influencers',   category: 'automate' },
-  { id: 3, task: 'Format media spend CSV for agency',    category: 'automate' },
-  { id: 4, task: 'Pull Mangaluru lead drop data',        category: 'automate' },
-  { id: 5, task: 'Schedule launch day social posts',     category: 'automate' },
-  { id: 6, task: 'Export competitor ad spend report',    category: 'automate' },
-  { id: 7, task: 'Generate Ugadi emailer subject lines', category: 'automate' },
+  { id: 1, task: 'Generate UTM links for the influencer post', category: 'automate' },
+  { id: 2, task: 'Last quarter competitor launch analysis',     category: 'automate' },
+  { id: 3, task: 'Draft three Ugadi social captions',           category: 'automate' },
+  { id: 4, task: 'Resize 40 festive Ugadi banners',             category: 'automate' },
+  { id: 5, task: 'Format media spend CSV for agency',           category: 'automate' },
+  { id: 6, task: 'Pull Mangaluru lead drop data',               category: 'automate' },
+  { id: 7, task: 'Generate Ugadi emailer subject lines',        category: 'automate' },
 ]
 const FALLBACK_OWN = [
   { id: 8,  task: 'Pivot visual language to Coastal identity', category: 'own' },
@@ -63,32 +63,155 @@ export default function Dashboard() {
     setActiveTaskWork({ task: taskName, output: '' })
     setWorkModalOpen(true)
     setIsWorking(true)
-    try {
-      const res = await fetch('/api/agent-work', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskName, userName })
-      })
-      if (!res.ok) throw new Error(await res.text())
-      const data = await res.json()
-      setActiveTaskWork({ task: taskName, output: data.result })
-    } catch (e) {
-      console.error(e)
-      setActiveTaskWork({ task: taskName, output: 'Error generating work: ' + e.message })
-    } finally {
-      setIsWorking(false)
-    }
+
+    console.log('handleViewWork calling for task:', taskName)
+    const isUTM        = taskName.includes('UTM')
+    const isCompetitor = taskName.includes('competitor')
+    const isCaptions   = taskName.includes('social captions')
+    const isSpecial    = isUTM || isCompetitor || isCaptions
+    const delay        = isSpecial ? 1500 : 800
+    
+    console.log('isSpecial:', isSpecial, 'delay:', delay)
+
+    setTimeout(async () => {
+      console.log('Timeout finished for task:', taskName)
+      try {
+        if (isSpecial) {
+          console.log('Setting rich deliverable state...')
+          setIsWorking(false)
+          setActiveTaskWork({ task: taskName, output: 'RICH_DELIVERABLE' })
+          return
+        }
+        const res = await fetch('/api/agent-work', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ taskName, userName })
+        })
+        if (!res.ok) throw new Error(await res.text())
+        const data = await res.json()
+        setActiveTaskWork({ task: taskName, output: data.result })
+      } catch (e) {
+        console.error(e)
+        setActiveTaskWork({ task: taskName, output: 'Error: ' + e.message })
+      } finally {
+        setIsWorking(false)
+      }
+    }, delay)
   }
 
-  const downloadWork = () => {
-    if (!activeTaskWork?.output) return
-    const blob = new Blob([activeTaskWork.output], { type: 'text/plain' })
+  const downloadFile = (txt, filename) => {
+    const blob = new Blob([txt], { type: 'text/plain' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${activeTaskWork.task.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.txt`
+    a.download = filename
     a.click()
     URL.revokeObjectURL(url)
+  }
+  const copyToClipboard = (txt) => {
+    navigator.clipboard.writeText(txt)
+    alert('Copied to clipboard!')
+  }
+
+  const UTMDeliverable = () => {
+    const data = [
+      { p: 'Instagram', i: '@shreyalifts', t: 'ugadi-2026', l: 'eduspark.com?utm_source=instagram&utm_medium=influencer&utm_campaign=ugadi-2026&utm_content=shreya' },
+      { p: 'YouTube', i: '@techwithriya', t: 'ugadi-2026', l: 'eduspark.com?utm_source=youtube&utm_medium=influencer&utm_campaign=ugadi-2026&utm_content=riya' },
+      { p: 'LinkedIn', i: '@growthwithkaran', t: 'ugadi-2026', l: 'eduspark.com?utm_source=linkedin&utm_medium=influencer&utm_campaign=ugadi-2026&utm_content=karan' },
+    ]
+    const fullText = data.map(d => `${d.p} | ${d.i} | ${d.t} | ${d.l}`).join('\n')
+    return (
+      <div style={{ padding: '32px', color: '#dce4e2' }}>
+        <h4 style={{ color: '#D4622A', fontWeight: 800, fontSize: '1.25rem', marginBottom: '24px' }}>UTM Links — Ugadi Influencer Campaign</h4>
+        <div style={{ overflowX: 'auto', background: 'rgba(0,0,0,0.2)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.8125rem' }}>
+            <thead style={{ background: 'rgba(255,255,255,0.03)', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <tr><th style={{ padding: '16px' }}>Platform</th><th style={{ padding: '16px' }}>Influencer</th><th style={{ padding: '16px' }}>Tag</th><th style={{ padding: '16px' }}>Link</th><th style={{ padding: '16px' }}></th></tr>
+            </thead>
+            <tbody>
+              {data.map((row, idx) => (
+                <tr key={idx} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                  <td style={{ padding: '16px', fontWeight: 700 }}>{row.p}</td>
+                  <td style={{ padding: '16px' }}>{row.i}</td>
+                  <td style={{ padding: '16px', color: 'rgba(255,255,255,0.6)' }}>{row.t}</td>
+                  <td style={{ padding: '16px', maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#2dd4bf' }}>{row.l}</td>
+                  <td style={{ padding: '16px' }}><button onClick={() => copyToClipboard(row.l)} style={{ background: 'rgba(255,255,255,0.05)', border: 'none', color: '#D4622A', cursor: 'pointer', fontSize: '0.625rem', fontWeight: 800, padding: '4px 8px', borderRadius: '4px' }}>COPY</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <button onClick={() => downloadFile(fullText, 'Ugadi_Influencer_UTMs.txt')} style={{ marginTop: '24px', background: '#D4622A', border: 'none', color: 'white', fontWeight: 700, padding: '12px 24px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}><span className="material-symbols-outlined" style={{ fontSize: '1.25rem' }}>download</span> Download all links</button>
+      </div>
+    )
+  }
+
+  const CompetitorDeliverable = () => {
+    const blocks = [
+      { stat: '41% higher CTR in Tier 2', detail: "Byju's Q4 launch used vernacular video-first vs English-only campaigns in AP and Karnataka", means: 'Your Ugadi creative should lead with Kannada or Telugu hook, not English headline', border: '#2dd4bf' },
+      { stat: '3x better conversion at ₹999', detail: "PhysicsWallah's regional push — ₹999 entry point outperformed ₹1,499 in Tier 2", means: 'Price your Ugadi Tier 2 offer below ₹1,000 to match market expectation', border: '#D4622A' },
+      { stat: '28% paid conversion in 30 days', detail: "Unacademy's free first week hook during Ugadi 2024", means: 'A time-limited free trial hook timed to Ugadi could drive your strongest Q1 conversion', border: '#2dd4bf' }
+    ]
+    return (
+      <div style={{ padding: '32px', color: '#dce4e2', position: 'relative' }}>
+        <div style={{ position: 'absolute', top: '32px', right: '32px', background: '#226b5d', color: 'white', fontSize: '0.625rem', fontWeight: 900, padding: '4px 10px', borderRadius: '4px', letterSpacing: '0.05em' }}>READY TO SEND TO MANAGER</div>
+        <h4 style={{ fontWeight: 800, fontSize: '1.5rem', marginBottom: '8px' }}>Competitor Launch Intelligence — Q1 2026</h4>
+        <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.875rem', marginBottom: '40px' }}>3 signals relevant to your Ugadi pricing and distribution strategy</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {blocks.map((b, i) => (
+            <div key={i} style={{ padding: '24px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', borderLeft: `4px solid ${b.border}` }}>
+              <h5 contentEditable style={{ fontSize: '1.25rem', fontWeight: 800, color: b.border, outline: 'none' }}>{b.stat}</h5>
+              <p contentEditable style={{ fontSize: '0.9375rem', lineHeight: 1.5, outline: 'none', margin: '8px 0' }}>{b.detail}</p>
+              <p contentEditable style={{ fontSize: '0.8125rem', color: 'rgba(255,255,255,0.5)', outline: 'none', fontStyle: 'italic' }}>{b.means}</p>
+            </div>
+          ))}
+        </div>
+        <button onClick={() => downloadFile(blocks.map(b => `${b.stat}\n${b.detail}\n${b.means}`).join('\n\n'), 'Competitor_Analysis_Megha_March2026.txt')} style={{ marginTop: '24px', background: '#D4622A', border: 'none', color: 'white', fontWeight: 700, padding: '12px 24px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}><span className="material-symbols-outlined" style={{ fontSize: '1.25rem' }}>download</span> Download Brief</button>
+      </div>
+    )
+  }
+  const CaptionsDeliverable = () => {
+    const [openedCard, setOpenedCard] = useState(0)
+    const cards = [
+      { tag: 'Emotional 🌿', text: 'This Ugadi, don’t just start fresh — start smart. While you celebrate new beginnings, let AI handle the grunt work so you can focus on what only you can do. 🌿 #Ugadi2026 #EduSpark' },
+      { tag: 'Data-led 📊', text: 'Did you know marketing teams lose 14 hours a week to repetitive tasks? This Ugadi, EduSpark is changing that. Meet Thrive — your AI co-pilot for the work that matters. #AIForWork' },
+      { tag: 'Bold 🔥', text: 'Your competition is already using AI. The question is — do you know which parts of your job to protect? This Ugadi, find out. EduSpark x Thrive. 🔥' }
+    ]
+    return (
+      <div style={{ padding: '32px', color: '#dce4e2' }}>
+        <h4 style={{ fontWeight: 800, fontSize: '1.25rem', marginBottom: '24px' }}>Draft Social Content Toolkit</h4>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {cards.map((c, i) => (
+            <div key={i} style={{ background: '#1A1A1A', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', overflow: 'hidden' }}>
+              <div onClick={() => setOpenedCard(openedCard === i ? -1 : i)} style={{ padding: '16px 24px', display: 'flex', justifyContent: 'space-between', cursor: 'pointer' }}>
+                <span style={{ fontSize: '0.625rem', fontWeight: 900, color: '#D4622A' }}>{c.tag}</span>
+                <span className="material-symbols-outlined">{openedCard === i ? 'expand_less' : 'expand_more'}</span>
+              </div>
+              {openedCard === i && (
+                <div style={{ padding: '0 24px 24px' }}>
+                  <textarea defaultValue={c.text} style={{ width: '100%', background: 'transparent', border: 'none', color: 'white', fontSize: '0.9375rem', lineHeight: 1.6, resize: 'none', minHeight: '80px', outline: 'none' }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button onClick={() => copyToClipboard(c.text)} style={{ background: 'rgba(212,98,42,0.1)', border: 'none', color: '#D4622A', cursor: 'pointer', padding: '6px 12px', borderRadius: '4px', fontSize: '0.625rem', fontWeight: 700 }}>COPY</button>
+                      <button onClick={() => downloadFile(c.text, `Caption_${i+1}.txt`)} style={{ background: 'rgba(255,255,255,0.05)', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer', padding: '6px 12px', borderRadius: '4px', fontSize: '0.625rem', fontWeight: 700 }}>SAVE</button>
+                    </div>
+                    <span style={{ fontSize: '0.625rem', color: 'rgba(255,255,255,0.3)' }}>{c.text.length} chars</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  const renderRichDeliverable = () => {
+    const task = activeTaskWork?.task || ''
+    if (task.includes('UTM')) return <UTMDeliverable />
+    if (task.includes('competitor')) return <CompetitorDeliverable />
+    if (task.includes('social captions')) return <CaptionsDeliverable />
+    return null
   }
 
 
@@ -504,25 +627,29 @@ export default function Dashboard() {
               <button onClick={() => setWorkModalOpen(false)} className="material-symbols-outlined" style={{ background: 'transparent', border: 'none', color: '#dec0b5', cursor: 'pointer' }}>close</button>
             </div>
             
-            <div style={{ padding: '32px', overflowY: 'auto', flexGrow: 1, whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.875rem', lineHeight: 1.6, color: '#dce4e2' }}>
+            <div className="hide-scrollbar" style={{ padding: '0', overflowY: 'auto', flexGrow: 1, color: '#dce4e2' }}>
               {isWorking ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', color: '#a0aab2' }}>
-                  <div style={{ width: '16px', height: '16px', border: '2px solid rgba(212,98,42,0.3)', borderTopColor: '#D4622A', borderRadius: '50%', animation: 'spin 1s linear infinite' }} /> Generating raw output...
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '300px', flexDirection: 'column', gap: '16px', color: '#a0aab2' }}>
+                  <div style={{ width: '32px', height: '32px', border: '3px solid rgba(212,98,42,0.3)', borderTopColor: '#D4622A', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                  <span style={{ fontWeight: 700, letterSpacing: '0.05em' }}>PREPARING DELIVERABLE...</span>
                 </div>
               ) : (
-                activeTaskWork?.output
+                activeTaskWork?.output === 'RICH_DELIVERABLE' ? renderRichDeliverable() : (
+                  <div style={{ padding: '32px', whiteSpace: 'pre-wrap', fontFamily: 'monospace', fontSize: '0.875rem', lineHeight: 1.6 }}>{activeTaskWork?.output}</div>
+                )
               )}
             </div>
 
-            <div style={{ padding: '20px 24px', borderTop: '1px solid rgba(87,66,58,0.1)', display: 'flex', justifyContent: 'flex-end', background: 'rgba(0,0,0,0.2)' }}>
-              <button 
-                onClick={downloadWork}
-                disabled={isWorking || !activeTaskWork?.output}
-                style={{ background: '#D4622A', border: 'none', color: 'white', fontWeight: 700, padding: '12px 24px', borderRadius: '8px', cursor: (isWorking || !activeTaskWork?.output) ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '8px', opacity: (isWorking || !activeTaskWork?.output) ? 0.5 : 1, transition: 'all 0.2s' }}
-              >
-                <span className="material-symbols-outlined" style={{ fontSize: '1.25rem' }}>download</span> Download
-              </button>
-            </div>
+            {(!isWorking && activeTaskWork?.output !== 'RICH_DELIVERABLE') && (
+              <div style={{ padding: '20px 24px', borderTop: '1px solid rgba(87,66,58,0.1)', display: 'flex', justifyContent: 'flex-end', background: 'rgba(0,0,0,0.2)' }}>
+                <button 
+                  onClick={() => downloadFile(activeTaskWork.output, `${activeTaskWork.task.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.txt`)}
+                  style={{ background: '#D4622A', border: 'none', color: 'white', fontWeight: 700, padding: '12px 24px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '1.25rem' }}>download</span> Download
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
